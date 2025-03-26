@@ -24,15 +24,11 @@
     body {
       font-family: "Merriweather", serif;
     }
-    /* 
-      Maintain a 9:5 aspect ratio and scale for smaller screens.
-      Adjust if you prefer a different ratio.
-    */
     .postcard {
       position: relative;
       width: 100%;
       max-width: 900px;
-      aspect-ratio: 9 / 5;
+      aspect-ratio: 9 / 5; /* maintain shape */
       display: flex;
       overflow: hidden;
       border-radius: 0.5rem;
@@ -40,6 +36,10 @@
     .download-button {
       position: relative;
       z-index: 10;
+    }
+    /* For text that might get long, allow scrolling in the left panel */
+    .left-panel {
+      overflow: auto; /* add scroll if content overflows */
     }
   </style>
 </head>
@@ -106,7 +106,7 @@
           <!-- Left side: brand color background -->
           <div
             id="postcard-left"
-            class="w-2/5 p-6 flex flex-col justify-center items-center text-center text-white"
+            class="left-panel w-2/5 p-6 flex flex-col justify-center items-center text-center text-white"
             style="background-color: #1F2937"
           >
             <!-- Brand Logo or fallback brand name -->
@@ -150,14 +150,14 @@
             </div>
           </div>
 
-          <!-- Right side: product image (fill entire area) -->
+          <!-- Right side: product image -->
           <div id="postcard-right" class="flex-1 relative">
             <img
               id="productImage"
               src=""
               alt="Product"
               class="absolute inset-0 w-full h-full object-cover"
-              style="display: none;"
+              style="display: none; object-position: 50% 50%;"
             />
           </div>
         </div>
@@ -216,7 +216,7 @@
           // Load products array
           allProducts = data.products || [];
           if (!Array.isArray(allProducts) || allProducts.length === 0) {
-            // No products found => single fallback item
+            // No products => single fallback item
             allProducts = [
               {
                 productName: "",
@@ -328,11 +328,13 @@
         brandNameEl.textContent = brandData.brandName;
       }
 
-      // Product name & price
+      // Product name
       document.getElementById("productName").textContent =
         productData.productName || "";
-      document.getElementById("productPrice").textContent =
-        productData.productPrice || "";
+
+      // Price: parse final $xx.xx
+      const parsedPrice = parseFinalPrice(productData.productPrice || "");
+      document.getElementById("productPrice").textContent = parsedPrice;
 
       // Domain (no prefix)
       document.getElementById("brandURL").textContent = brandData.brandDomain;
@@ -367,14 +369,23 @@
         brandData.brandDomain;
     }
 
+    // Return either the last "$xx.xx" or empty string
+    function parseFinalPrice(fullPrice) {
+      // Example: "Regular price $46.99 Sale price $40.99" => "$40.99"
+      // Grab the last "$" and everything until the next space (or end).
+      const matches = fullPrice.match(/\$[0-9.,]+/g);
+      if (!matches || matches.length === 0) {
+        return "";
+      }
+      return matches[matches.length - 1]; // the last match
+    }
+
     // Simple contrast check: returns "#000" or "#fff"
     function getContrastColor(bgHex) {
       const hex = bgHex.replace("#", "");
-      // parse R,G,B
       const r = parseInt(hex.substr(0, 2), 16) || 0;
       const g = parseInt(hex.substr(2, 2), 16) || 0;
       const b = parseInt(hex.substr(4, 2), 16) || 0;
-      // YIQ formula
       const yiq = (r * 299 + g * 587 + b * 114) / 1000;
       return yiq >= 128 ? "#000" : "#fff";
     }

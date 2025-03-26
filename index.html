@@ -274,6 +274,7 @@
                     // Hide generating state
                     generatingState.classList.add('hidden');
                 }
+                
             });
             
             // Update button click
@@ -385,6 +386,24 @@
 
             // Add a test button click to make sure the event listeners are working
             console.log("DOMContentLoaded event fired, all event listeners should be set up");
+            document.getElementById("postcardForm").addEventListener("submit", async function (e) {
+                e.preventDefault(); // prevent form from refreshing the page
+
+                const urlInput = document.getElementById("websiteUrl").value;
+                if (!urlInput) {
+                    alert("Please enter a website URL");
+                    return;
+                }
+            
+                try {
+                    const data = await extractWebsiteData(urlInput);
+                    console.log("Data received:", data);
+                    // You can now call a function like renderPostcard(data) here to update the postcard UI
+                } catch (error) {
+                    alert("Failed to generate postcard. See console for details.");
+                }
+            });
+
         });
     </script>
 </body>

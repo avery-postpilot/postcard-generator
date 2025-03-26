@@ -9,7 +9,7 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["cheerio"]
+  external_node_modules = ["cheerio", "node-vibrant"]
 
 [dev]
   functions = "netlify/functions"

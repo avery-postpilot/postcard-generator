@@ -175,6 +175,34 @@
             const productImage = document.getElementById('productImage');
             const postcardLeft = document.querySelector('.postcard .w-2/5');
             
+            // Fallback function for local development or when Netlify function is not available
+            function fallbackExtraction(url) {
+                console.log("Using fallback extraction for URL:", url);
+                // Parse the domain from the URL
+                let domain = url;
+                if (domain.startsWith('http://')) domain = domain.substring(7);
+                if (domain.startsWith('https://')) domain = domain.substring(8);
+                if (domain.startsWith('www.')) domain = domain.substring(4);
+                domain = domain.split('/')[0];
+                
+                // Get the brand name from the domain
+                const brandName = domain.split('.')[0]
+                    .replace(/-/g, ' ')
+                    .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+                
+                // Generate random brand color - PostPilot-like colors
+                const brandColors = ['#1F2937', '#2563EB', '#7C3AED', '#DB2777', '#059669', '#D97706'];
+                const randomColor = brandColors[Math.floor(Math.random() * brandColors.length)];
+                
+                return {
+                    brandName: brandName,
+                    logoUrl: `https://logo.clearbit.com/${domain}`,
+                    productName: 'Featured Product',
+                    productImageUrl: `https://placehold.co/540x500/cccccc/333333?text=${encodeURIComponent(brandName)}+Product`,
+                    brandColor: randomColor
+                };
+            }
+            
             // Generate button click
             generateBtn.addEventListener('click', async function() {
                 const websiteUrl = websiteUrlInput.value.trim();
@@ -203,20 +231,10 @@
                     } catch (fetchError) {
                         console.error("Netlify function error:", fetchError);
                         
-                        // If we're in development and the serverless function isn't available
-                        // use fallback data extraction based on the domain
-                        const domain = websiteUrl.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-                        console.log("Using fallback extraction for domain:", domain);
-                        
-                        // Using fallback extraction logic
-                        extractedData = {
-                            brandName: domain.split('.')[0].replace(/\w\S*/g, 
-                                txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()),
-                            productName: 'Featured Product',
-                            logoUrl: `https://logo.clearbit.com/${domain}`,
-                            productImageUrl: 'https://placehold.co/540x500?text=Product+Image',
-                            brandColor: '#1F2937'
-                        };
+                        // Use fallback data extraction
+                        console.log("Using fallback extraction mechanism");
+                        extractedData = fallbackExtraction(websiteUrl);
+                        console.log("Fallback data generated:", extractedData);
                     }
                     
                     console.log("Updating UI with extracted data");
@@ -302,12 +320,21 @@
             
             // Update postcard display with current form values
             function updatePostcardDisplay() {
+                console.log("Updating postcard display with values:", {
+                    brand: brandNameInput.value,
+                    product: productNameInput.value,
+                    logo: logoUrlInput.value,
+                    image: productImageUrlInput.value,
+                    color: brandColorInput.value
+                });
+                
                 brandNameDisplay.textContent = brandNameInput.value || 'BRAND NAME';
                 productNameDisplay.textContent = productNameInput.value || 'Product Name';
                 
                 if (logoUrlInput.value) {
                     brandLogo.src = logoUrlInput.value;
                     brandLogo.onerror = function() {
+                        console.error("Error loading logo image, using fallback");
                         this.src = 'https://placehold.co/200x80?text=Brand+Logo';
                     };
                 }
@@ -315,63 +342,50 @@
                 if (productImageUrlInput.value) {
                     productImage.src = productImageUrlInput.value;
                     productImage.onerror = function() {
+                        console.error("Error loading product image, using fallback");
                         this.src = 'https://placehold.co/540x500?text=Product+Image';
                     };
                 }
                 
                 // Update color theme
                 postcardLeft.style.backgroundColor = brandColorInput.value;
+                console.log("Postcard display updated");
             }
             
             // Function to extract website data using the serverless function
             async function extractWebsiteData(url) {
                 try {
-                    const response = await fetch('/.netlify/functions/scrape', {
+                    console.log(`Attempting to fetch data from: /.netlify/functions/scrape for URL: ${url}`);
+                    
+                    // If we're running locally, might need to modify the path
+                    const functionPath = '/.netlify/functions/scrape';
+                    
+                    const response = await fetch(functionPath, {
                         method: 'POST',
                         body: JSON.stringify({ url }),
                         headers: { 'Content-Type': 'application/json' }
                     });
                     
+                    console.log("Function response status:", response.status);
+                    
                     if (!response.ok) {
-                        throw new Error('Failed to scrape website');
+                        const errorText = await response.text();
+                        console.error("Error response body:", errorText);
+                        throw new Error(`Failed to scrape website: ${response.status} ${response.statusText}`);
                     }
                     
                     const data = await response.json();
+                    console.log("Received data from function:", data);
                     return data;
                 } catch (error) {
                     console.error('Error calling scrape function:', error);
                     throw error;
                 }
             }
-        });
 
-        // Fallback function for local development or when Netlify function is not available
-        function fallbackExtraction(url) {
-            console.log("Using fallback extraction for URL:", url);
-            // Parse the domain from the URL
-            let domain = url;
-            if (domain.startsWith('http://')) domain = domain.substring(7);
-            if (domain.startsWith('https://')) domain = domain.substring(8);
-            if (domain.startsWith('www.')) domain = domain.substring(4);
-            domain = domain.split('/')[0];
-            
-            // Get the brand name from the domain
-            const brandName = domain.split('.')[0]
-                .replace(/-/g, ' ')
-                .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
-            
-            // Generate random brand color - PostPilot-like colors
-            const brandColors = ['#1F2937', '#2563EB', '#7C3AED', '#DB2777', '#059669', '#D97706'];
-            const randomColor = brandColors[Math.floor(Math.random() * brandColors.length)];
-            
-            return {
-                brandName: brandName,
-                logoUrl: `https://logo.clearbit.com/${domain}`,
-                productName: 'Featured Product',
-                productImageUrl: `https://placehold.co/540x500/cccccc/333333?text=${encodeURIComponent(brandName)}+Product`,
-                brandColor: randomColor
-            };
-        }
+            // Add a test button click to make sure the event listeners are working
+            console.log("DOMContentLoaded event fired, all event listeners should be set up");
+        });
     </script>
 </body>
 </html>

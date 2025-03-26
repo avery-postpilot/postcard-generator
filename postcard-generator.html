@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostPilot Postcard Generator</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        .postcard {
+            width: 900px;
+            height: 500px;
+            position: relative;
+            overflow: hidden;
+        }
+        .template-preview {
+            width: 100px;
+            height: 60px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .template-preview:hover {
+            transform: scale(1.05);
+        }
+        .template-selected {
+            border: 3px solid #3B82F6;
+        }
+        .loader {
+            border-top-color: #3B82F6;
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+        @-webkit-keyframes spinner {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #colorPicker {
+            height: 30px;
+            width: 100%;
+            padding: 0;
+            border: none;
+            background: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-center text-gray-800">PostPilot Postcard Generator</h1>
+            <p class="text-center text-gray-600">Generate custom marketing postcards for email outreach</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left panel - Input controls -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Settings</h2>
+                
+                <form id="postcardForm" class="space-y-4">
+                    <div>
+                        <label for="websiteUrl" class="block text-sm font-medium text-gray-700">Website URL</label>
+                        <input type="url" id="websiteUrl" name="websiteUrl" placeholder="https://example.com" 
+                            class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                            required>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Business Category</label>
+                        <div class="grid grid-cols-3 gap-2 mt-2">
+                            <div class="template-option">
+                                <img src="/api/placeholder/100/60" alt="Home & Garden Template" class="template-preview template-selected" data-template="home">
+                                <p class="text-xs text-center mt-1">Home & Garden</p>
+                            </div>
+                            <div class="template-option">
+                                <img src="/api/placeholder/100/60" alt="Apparel Template" class="template-preview" data-template="apparel">
+                                <p class="text-xs text-center mt-1">Apparel</p>
+                            </div>
+                            <div class="template-option">
+                                <img src="/api/placeholder/100/60" alt="Beauty Template" class="template-preview" data-template="beauty">
+                                <p class="text-xs text-center mt-1">Beauty</p>
+                            </div>
+                            <div class="template-option">
+                                <img src="/api/placeholder/100/60" alt="Electronics Template" class="template-preview" data-template="electronics">
+                                <p class="text-xs text-center mt-1">Electronics</p>
+                            </div>
+                            <div class="template-option">
+                                <img src="/api/placeholder/100/60" alt="Food & Beverage Template" class="template-preview" data-template="food">
+                                <p class="text-xs text-center mt-1">Food & Beverage</p>
+                            </div>
+                            <div class="template-option">
+                                <img src="/api/placeholder/100/60" alt="Baby & Toddler Template" class="template-preview" data-template="baby">
+                                <p class="text-xs text-center mt-1">Baby & Toddler</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-gray-200 pt-4">
+                        <button type="button" id="generateBtn" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            Generate Postcard
+                        </button>
+                    </div>
+                </form>
+
+                <div id="generatingState" class="hidden mt-4">
+                    <div class="flex justify-center items-center">
+                        <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12"></div>
+                    </div>
+                    <p class="text-center mt-2 text-gray-600">Generating postcard...</p>
+                </div>
+
+                <div id="extractedInfo" class="hidden mt-6 border-t border-gray-200 pt-4">
+                    <h3 class="text-lg font-medium mb-3">Customize Elements</h3>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Brand Logo</label>
+                            <div class="flex mt-1">
+                                <img id="extractedLogo" src="/api/placeholder/100/40" alt="Extracted Logo" class="h-10 mr-2 border border-gray-300">
+                                <input type="url" id="logoUrl" placeholder="Custom logo URL" class="flex-1 border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Brand Colors</label>
+                            <div class="mt-1">
+                                <input type="color" id="colorPicker" value="#000000">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Product Image</label>
+                            <div class="flex mt-1">
+                                <img id="extractedProduct" src="/api/placeholder/100/60" alt="Product Image" class="h-14 mr-2 border border-gray-300">
+                                <input type="url" id="productUrl" placeholder="Custom product URL" class="flex-1 border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label for="brandName" class="block text-sm font-medium text-gray-700">Brand Name</label>
+                            <input type="text" id="brandName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+                        
+                        <div>
+                            <label for="productName" class="block text-sm font-medium text-gray-700">Product Name</label>
+                            <input type="text" id="productName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+
+                        <div>
+                            <button type="button" id="updateBtn" class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+                                Update Postcard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Middle panel - Postcard preview -->
+            <div class="lg:col-span-2">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-semibold mb-4">Postcard Preview</h2>
+                    
+                    <div id="postcardContainer" class="overflow-hidden flex justify-center">
+                        <div id="postcard" class="postcard flex shadow-lg rounded-lg">
+                            <!-- Left side (dark) of the postcard -->
+                            <div class="w-2/5 bg-gray-800 p-8 flex flex-col justify-between">
+                                <div>
+                                    <div class="mb-6">
+                                        <img id="brandLogo" src="/api/placeholder/120/60" alt="Brand Logo" class="h-16">
+                                    </div>
+                                    <h1 id="brandNameDisplay" class="text-white text-3xl font-bold mb-1">BRAND NAME</h1>
+                                </div>
+                                
+                                <div>
+                                    <h2 class="text-white text-2xl font-bold">HELLO,</h2>
+                                    <h2 class="text-white text-4xl font-bold mb-6">CUSTOMER!</h2>
+                                    
+                                    <p class="text-white text-xl uppercase mb-1">SHOP OUR SALE TODAY</p>
+                                    <p class="text-white text-xl font-bold mb-6">GET UP TO 20% OFF</p>
+                                    
+                                    <div class="border-2 border-white inline-block px-4 py-2">
+                                        <p class="text-white text-sm">USE CODE: <span class="font-bold">DIRECTMAIL20</span></p>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h3 id="productNameDisplay" class="text-white text-2xl italic mb-1">Product Name</h3>
+                                    <p class="text-white opacity-75">$Price | Brand URL</p>
+                                    <div class="h-1 w-16 bg-white mt-2 mb-2"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Right side (image) of the postcard -->
+                            <div class="w-3/5 bg-cover bg-center" id="productImageContainer">
+                                <img id="productImage" src="/api/placeholder/540/500" alt="Product Image" class="w-full h-full object-cover">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 flex justify-center">
+                        <button id="downloadBtn" class="bg-blue-600 text-white py-2 px-6 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" disabled>
+                            Download Postcard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Select elements
+            const generateBtn = document.getElementById('generateBtn');
+            const updateBtn = document.getElementById('updateBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const websiteUrlInput = document.getElementById('websiteUrl');
+            const extractedInfo = document.getElementById('extractedInfo');
+            const generatingState = document.getElementById('generatingState');
+            const templatePreviews = document.querySelectorAll('.template-preview');
+            const colorPicker = document.getElementById('colorPicker');
+            
+            // Postcard elements
+            const brandLogo = document.getElementById('brandLogo');
+            const brandNameDisplay = document.getElementById('brandNameDisplay');
+            const productNameDisplay = document.getElementById('productNameDisplay');
+            const productImage = document.getElementById('productImage');
+            const extractedLogo = document.getElementById('extractedLogo');
+            const extractedProduct = document.getElementById('extractedProduct');
+            
+            // Form inputs for customization
+            const logoUrlInput = document.getElementById('logoUrl');
+            const productUrlInput = document.getElementById('productUrl');
+            const brandNameInput = document.getElementById('brandName');
+            const productNameInput = document.getElementById('productName');
+            
+            // Current template selection
+            let currentTemplate = 'home';
+            
+            // Handle template selection
+            templatePreviews.forEach(preview => {
+                preview.addEventListener('click', function() {
+                    // Remove selected class from all previews
+                    templatePreviews.forEach(p => p.classList.remove('template-selected'));
+                    // Add selected class to clicked preview
+                    this.classList.add('template-selected');
+                    // Update current template
+                    currentTemplate = this.dataset.template;
+                    
+                    // Update template styles
+                    updateTemplateStyle(currentTemplate);
+                });
+            });
+            
+            // Generate button click
+            generateBtn.addEventListener('click', async function() {
+                const websiteUrl = websiteUrlInput.value.trim();
+                
+                if (!websiteUrl) {
+                    alert('Please enter a website URL');
+                    return;
+                }
+                
+                // Show generating state
+                generatingState.classList.remove('hidden');
+                
+                try {
+                    // Call the scraper function
+                    // In production, this would use the actual API endpoint
+                    // For GitHub Pages deployment, we'll fall back to simulated data if no API is available
+                    let extractedData;
+                    
+                    try {
+                        // Try to call the serverless function
+                        const response = await fetch('/.netlify/functions/scrape', {
+                            method: 'POST',
+                            body: JSON.stringify({ url: websiteUrl }),
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('API call failed');
+                        }
+                        
+                        extractedData = await response.json();
+                    } catch (error) {
+                        console.warn('API call failed, using fallback data:', error);
+                        // Fallback to simulated data for GitHub Pages or if API fails
+                        extractedData = simulateExtraction(websiteUrl, currentTemplate);
+                    }
+                    
+                    // If no product name was found, use template-specific one
+                    if (!extractedData.productName) {
+                        extractedData.productName = getProductNameByTemplate(currentTemplate);
+                    }
+                    
+                    // If no product image was found, use template-specific one
+                    if (!extractedData.productImageUrl) {
+                        extractedData.productImageUrl = getProductImageByTemplate(currentTemplate);
+                    }
+                    
+                    // Update the form fields
+                    brandNameInput.value = extractedData.brandName;
+                    productNameInput.value = extractedData.productName;
+                    logoUrlInput.value = extractedData.logoUrl;
+                    productUrlInput.value = extractedData.productImageUrl;
+                    colorPicker.value = extractedData.brandColor;
+                    
+                    // Update the postcard
+                    brandNameDisplay.textContent = simulatedResults.brandName;
+                    productNameDisplay.textContent = simulatedResults.productName;
+                    brandLogo.src = simulatedResults.logoUrl;
+                    extractedLogo.src = simulatedResults.logoUrl;
+                    productImage.src = simulatedResults.productImageUrl;
+                    extractedProduct.src = simulatedResults.productImageUrl;
+                    
+                    // Update color theme
+                    document.querySelector('.postcard .w-2/5').style.backgroundColor = simulatedResults.brandColor;
+                    
+                    // Hide generating state
+                    generatingState.classList.add('hidden');
+                    
+                    // Show extracted info for customization
+                    extractedInfo.classList.remove('hidden');
+                    
+                    // Enable download button
+                    downloadBtn.disabled = false;
+                }, 2000);
+            });
+            
+            // Update button click
+            updateBtn.addEventListener('click', function() {
+                // Update postcard with customized values
+                brandNameDisplay.textContent = brandNameInput.value;
+                productNameDisplay.textContent = productNameInput.value;
+                
+                if (logoUrlInput.value) {
+                    brandLogo.src = logoUrlInput.value;
+                }
+                
+                if (productUrlInput.value) {
+                    productImage.src = productUrlInput.value;
+                }
+                
+                // Update color theme
+                document.querySelector('.postcard .w-2/5').style.backgroundColor = colorPicker.value;
+            });
+            
+            // Download button click
+            downloadBtn.addEventListener('click', function() {
+                // Show a brief loading message
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = 'Generating...';
+                downloadBtn.disabled = true;
+                
+                // Use html2canvas to convert the postcard div to an image
+                html2canvas(document.getElementById('postcard'), {
+                    scale: 2, // Higher scale for better quality
+                    logging: false,
+                    useCORS: true // To handle cross-origin images
+                }).then(canvas => {
+                    // Create an image from the canvas
+                    const image = canvas.toDataURL('image/png');
+                    
+                    // Create a download link
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = image;
+                    downloadLink.download = `${brandNameInput.value || 'brand'}_postcard.png`;
+                    
+                    // Trigger download
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    
+                    // Restore button state
+                    downloadBtn.textContent = originalText;
+                    downloadBtn.disabled = false;
+                }).catch(err => {
+                    console.error('Error generating image:', err);
+                    alert('There was an error generating the image. Please try again.');
+                    downloadBtn.textContent = originalText;
+                    downloadBtn.disabled = false;
+                });
+            });
+            
+            // Function to update template style based on category
+            function updateTemplateStyle(template) {
+                const postcardLeft = document.querySelector('.postcard .w-2/5');
+                
+                // Reset styles
+                postcardLeft.style.backgroundColor = '#1F2937'; // Default dark gray
+                
+                // Apply template-specific styles
+                switch (template) {
+                    case 'home':
+                        postcardLeft.style.backgroundColor = '#1F2937'; // Dark gray
+                        break;
+                    case 'apparel':
+                        postcardLeft.style.backgroundColor = '#4B5563'; // Medium gray
+                        break;
+                    case 'beauty':
+                        postcardLeft.style.backgroundColor = '#9D174D'; // Pink
+                        break;
+                    case 'electronics':
+                        postcardLeft.style.backgroundColor = '#1E40AF'; // Blue
+                        break;
+                    case 'food':
+                        postcardLeft.style.backgroundColor = '#065F46'; // Green
+                        break;
+                    case 'baby':
+                        postcardLeft.style.backgroundColor = '#6D28D9'; // Purple
+                        break;
+                }
+            }
+            
+            // Function to simulate website extraction
+            function simulateExtraction(url, template) {
+                // Extract domain name from URL
+                let domain = url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+                let brandName = domain.split('.')[0].toUpperCase();
+                
+                // Generate a brand-appropriate color based on template
+                let brandColor;
+                switch (template) {
+                    case 'home':
+                        brandColor = '#1F2937'; // Dark gray
+                        break;
+                    case 'apparel':
+                        brandColor = '#4B5563'; // Medium gray
+                        break;
+                    case 'beauty':
+                        brandColor = '#9D174D'; // Pink
+                        break;
+                    case 'electronics':
+                        brandColor = '#1E40AF'; // Blue
+                        break;
+                    case 'food':
+                        brandColor = '#065F46'; // Green
+                        break;
+                    case 'baby':
+                        brandColor = '#6D28D9'; // Purple
+                        break;
+                    default:
+                        brandColor = '#1F2937'; // Default dark gray
+                }
+                
+                // Simulated extraction results
+                // In a real implementation, these would come from web scraping
+                return {
+                    brandName: brandName,
+                    productName: getProductNameByTemplate(template),
+                    logoUrl: getLogoPlaceholder(brandName),
+                    productImageUrl: getProductImageByTemplate(template),
+                    brandColor: brandColor
+                };
+            }
+            
+            // Function to get a placeholder logo
+            function getLogoPlaceholder(brandName) {
+                // In a real implementation, this would be extracted from the website
+                // For now, we'll generate a text-based logo placeholder
+                return `https://via.placeholder.com/200x100/ffffff/000000?text=${brandName}`;
+            }
+            
+            // Function to get product name by template
+            function getProductNameByTemplate(template) {
+                switch (template) {
+                    case 'home':
+                        return 'Modern Living Room Set';
+                    case 'apparel':
+                        return 'Premium Cotton T-Shirt';
+                    case 'beauty':
+                        return 'Hydrating Face Serum';
+                    case 'electronics':
+                        return 'Wireless Noise-Canceling Headphones';
+                    case 'food':
+                        return 'Organic Coffee Beans';
+                    case 'baby':
+                        return 'Adjustable Baby Carrier';
+                    default:
+                        return 'Featured Product';
+                }
+            }
+            
+            // Function to get product image by template
+            function getProductImageByTemplate(template) {
+                // In a real implementation, this would be extracted from the website
+                // For now, we'll use placeholder images based on the template
+                switch (template) {
+                    case 'home':
+                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Home+Decor+Image';
+                    case 'apparel':
+                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Apparel+Image';
+                    case 'beauty':
+                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Beauty+Product+Image';
+                    case 'electronics':
+                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Electronics+Image';
+                    case 'food':
+                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Food+Product+Image';
+                    case 'baby':
+                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Baby+Product+Image';
+                    default:
+                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Product+Image';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

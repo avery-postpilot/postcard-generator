@@ -1,6 +1,6 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
-const Vibrant = require("node-vibrant"); // for color extraction
+const { Vibrant } = require("node-vibrant/node"); // <-- named import from "node" subpath
 
 exports.handler = async function (event, context) {
   // CORS headers
@@ -89,7 +89,7 @@ exports.handler = async function (event, context) {
       .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
     results.brandName = brandName;
 
-    // Brand color from <meta name="theme-color">
+    // Attempt brand color from <meta name="theme-color">
     const themeColor = $('meta[name="theme-color"]').attr("content");
     if (themeColor && isValidHex(themeColor)) {
       results.brandColor = themeColor;

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostPilot Postcard Generator</title>
+    <!-- Using CDN links for easy deployment -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <style>
+        .postcard {
+            width: 900px;
+            height: 500px;
+            position: relative;
+            overflow: hidden;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-center text-gray-800">PostPilot Postcard Generator</h1>
+            <p class="text-center text-gray-600">Generate custom marketing postcards for email outreach</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left panel - Input controls -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Settings</h2>
+                
+                <form id="postcardForm" class="space-y-4">
+                    <div>
+                        <label for="websiteUrl" class="block text-sm font-medium text-gray-700">Website URL</label>
+                        <input type="url" id="websiteUrl" name="websiteUrl" placeholder="https://example.com" 
+                            class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                            required>
+                    </div>
+
+                    <div class="border-t border-gray-200 pt-4">
+                        <button type="button" id="generateBtn" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            Generate Postcard
+                        </button>
+                    </div>
+                </form>
+
+                <div id="generatingState" class="hidden mt-4">
+                    <div class="loader"></div>
+                    <p class="text-center mt-2 text-gray-600">Generating postcard...</p>
+                </div>
+
+                <div id="customizationForm" class="hidden mt-6 border-t border-gray-200 pt-4">
+                    <h3 class="text-lg font-medium mb-3">Customize Elements</h3>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label for="brandName" class="block text-sm font-medium text-gray-700">Brand Name</label>
+                            <input type="text" id="brandName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+                        
+                        <div>
+                            <label for="productName" class="block text-sm font-medium text-gray-700">Product Name</label>
+                            <input type="text" id="productName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+                        
+                        <div>
+                            <label for="logoUrl" class="block text-sm font-medium text-gray-700">Logo URL</label>
+                            <input type="url" id="logoUrl" placeholder="https://example.com/logo.png" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+                        
+                        <div>
+                            <label for="productImageUrl" class="block text-sm font-medium text-gray-700">Product Image URL</label>
+                            <input type="url" id="productImageUrl" placeholder="https://example.com/product.jpg" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+                        
+                        <div>
+                            <label for="brandColor" class="block text-sm font-medium text-gray-700">Brand Color</label>
+                            <input type="color" id="brandColor" value="#1F2937" class="mt-1 block w-full h-10 p-0 border-0">
+                        </div>
+
+                        <div>
+                            <button type="button" id="updateBtn" class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+                                Update Postcard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right panel - Postcard preview -->
+            <div class="lg:col-span-2">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-semibold mb-4">Postcard Preview</h2>
+                    
+                    <div id="postcardContainer" class="overflow-auto flex justify-center">
+                        <div id="postcard" class="postcard flex shadow-lg rounded-lg">
+                            <!-- Left side (dark) of the postcard -->
+                            <div class="w-2/5 bg-gray-800 p-8 flex flex-col justify-between">
+                                <div>
+                                    <div class="mb-6 h-16 flex items-center">
+                                        <img id="brandLogo" src="https://placehold.co/200x80?text=Brand+Logo" alt="Brand Logo" class="max-h-16">
+                                    </div>
+                                    <h1 id="brandNameDisplay" class="text-white text-3xl font-bold mb-1">BRAND NAME</h1>
+                                </div>
+                                
+                                <div>
+                                    <h2 class="text-white text-2xl font-bold">HELLO,</h2>
+                                    <h2 class="text-white text-4xl font-bold mb-6">CUSTOMER!</h2>
+                                    
+                                    <p class="text-white text-xl uppercase mb-1">SHOP OUR SALE TODAY</p>
+                                    <p class="text-white text-xl font-bold mb-6">GET UP TO 20% OFF</p>
+                                    
+                                    <div class="border-2 border-white inline-block px-4 py-2">
+                                        <p class="text-white text-sm">USE CODE: <span class="font-bold">DIRECTMAIL20</span></p>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h3 id="productNameDisplay" class="text-white text-2xl italic mb-1">Product Name</h3>
+                                    <p class="text-white opacity-75">$Price | Brand URL</p>
+                                    <div class="h-1 w-16 bg-white mt-2 mb-2"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Right side (image) of the postcard -->
+                            <div class="w-3/5 bg-cover bg-center" id="productImageContainer">
+                                <img id="productImage" src="https://placehold.co/540x500?text=Product+Image" alt="Product Image" class="w-full h-full object-cover">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 flex justify-center">
+                        <button id="downloadBtn" class="bg-blue-600 text-white py-2 px-6 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" disabled>
+                            Download Postcard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM Elements
+            const generateBtn = document.getElementById('generateBtn');
+            const updateBtn = document.getElementById('updateBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const websiteUrlInput = document.getElementById('websiteUrl');
+            const customizationForm = document.getElementById('customizationForm');
+            const generatingState = document.getElementById('generatingState');
+            
+            // Form inputs
+            const brandNameInput = document.getElementById('brandName');
+            const productNameInput = document.getElementById('productName');
+            const logoUrlInput = document.getElementById('logoUrl');
+            const productImageUrlInput = document.getElementById('productImageUrl');
+            const brandColorInput = document.getElementById('brandColor');
+            
+            // Postcard elements
+            const brandLogo = document.getElementById('brandLogo');
+            const brandNameDisplay = document.getElementById('brandNameDisplay');
+            const productNameDisplay = document.getElementById('productNameDisplay');
+            const productImage = document.getElementById('productImage');
+            const postcardLeft = document.querySelector('.postcard .w-2/5');
+            
+            // Fallback function for local development or when Netlify function is not available
+            function fallbackExtraction(url) {
+                console.log("Using fallback extraction for URL:", url);
+                // Parse the domain from the URL
+                let domain = url;
+                if (domain.startsWith('http://')) domain = domain.substring(7);
+                if (domain.startsWith('https://')) domain = domain.substring(8);
+                if (domain.startsWith('www.')) domain = domain.substring(4);
+                domain = domain.split('/')[0];
+                
+                // Get the brand name from the domain
+                const brandName = domain.split('.')[0]
+                    .replace(/-/g, ' ')
+                    .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+                
+                // Generate random brand color - PostPilot-like colors
+                const brandColors = ['#1F2937', '#2563EB', '#7C3AED', '#DB2777', '#059669', '#D97706'];
+                const randomColor = brandColors[Math.floor(Math.random() * brandColors.length)];
+                
+                return {
+                    brandName: brandName,
+                    logoUrl: `https://logo.clearbit.com/${domain}`,
+                    productName: 'Featured Product',
+                    productImageUrl: `https://placehold.co/540x500/cccccc/333333?text=${encodeURIComponent(brandName)}+Product`,
+                    brandColor: randomColor
+                };
+            }
+            
+            // Generate button click
+            generateBtn.addEventListener('click', async function() {
+                const websiteUrl = websiteUrlInput.value.trim();
+                
+                if (!websiteUrl) {
+                    alert('Please enter a website URL');
+                    return;
+                }
+                
+                // Show generating state
+                generatingState.classList.remove('hidden');
+                customizationForm.classList.add('hidden');
+                downloadBtn.disabled = true;
+                
+                console.log("Generate button clicked for URL:", websiteUrl);
+                
+                try {
+                    // For development/testing - if Netlify functions aren't available, use mock data
+                    let extractedData;
+                    
+                    try {
+                        // Extract information from URL using the serverless function
+                        console.log("Attempting to call serverless function...");
+                        extractedData = await extractWebsiteData(websiteUrl);
+                        console.log("Data extracted successfully:", extractedData);
+                    } catch (fetchError) {
+                        console.error("Netlify function error:", fetchError);
+                        
+                        // Use fallback data extraction
+                        console.log("Using fallback extraction mechanism");
+                        extractedData = fallbackExtraction(websiteUrl);
+                        console.log("Fallback data generated:", extractedData);
+                    }
+                    
+                    console.log("Updating UI with extracted data");
+                    
+                    // Update form fields with extracted data
+                    brandNameInput.value = extractedData.brandName || 'Brand Name';
+                    productNameInput.value = extractedData.productName || 'Featured Product';
+                    logoUrlInput.value = extractedData.logoUrl || '';
+                    productImageUrlInput.value = extractedData.productImageUrl || '';
+                    brandColorInput.value = extractedData.brandColor || '#1F2937';
+                    
+                    // Update postcard displays
+                    updatePostcardDisplay();
+                    
+                    // Show customization form
+                    customizationForm.classList.remove('hidden');
+                    downloadBtn.disabled = false;
+                } catch (error) {
+                    console.error('Unhandled error:', error);
+                    alert('Failed to extract data from the website. Please try a different URL or enter information manually.');
+                    
+                    // Fill with fallback data so user can proceed
+                    const domain = websiteUrlInput.value.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+                    const brandName = domain.split('.')[0].replace(/\w\S*/g, 
+                        txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+                    
+                    brandNameInput.value = brandName;
+                    productNameInput.value = 'Featured Product';
+                    logoUrlInput.value = `https://logo.clearbit.com/${domain}`;
+                    productImageUrlInput.value = 'https://placehold.co/540x500?text=Product+Image';
+                    brandColorInput.value = '#1F2937';
+                    
+                    updatePostcardDisplay();
+                    customizationForm.classList.remove('hidden');
+                    downloadBtn.disabled = false;
+                } finally {
+                    // Hide generating state
+                    generatingState.classList.add('hidden');
+                }
+            });
+            
+            // Update button click
+            updateBtn.addEventListener('click', function() {
+                updatePostcardDisplay();
+            });
+            
+            // Download button click
+            downloadBtn.addEventListener('click', function() {
+                // Show a brief loading message
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = 'Generating...';
+                downloadBtn.disabled = true;
+                
+                // Use html2canvas to convert the postcard div to an image
+                html2canvas(document.getElementById('postcard'), {
+                    scale: 2, // Higher scale for better quality
+                    logging: false,
+                    useCORS: true // To handle cross-origin images
+                }).then(canvas => {
+                    // Create an image from the canvas
+                    const image = canvas.toDataURL('image/png');
+                    
+                    // Create a download link
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = image;
+                    downloadLink.download = `${brandNameInput.value || 'brand'}_postcard.png`;
+                    
+                    // Trigger download
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    
+                    // Restore button state
+                    downloadBtn.textContent = originalText;
+                    downloadBtn.disabled = false;
+                }).catch(err => {
+                    console.error('Error generating image:', err);
+                    alert('There was an error generating the image. Please try again.');
+                    downloadBtn.textContent = originalText;
+                    downloadBtn.disabled = false;
+                });
+            });
+            
+            // Update postcard display with current form values
+            function updatePostcardDisplay() {
+                console.log("Updating postcard display with values:", {
+                    brand: brandNameInput.value,
+                    product: productNameInput.value,
+                    logo: logoUrlInput.value,
+                    image: productImageUrlInput.value,
+                    color: brandColorInput.value
+                });
+                
+                brandNameDisplay.textContent = brandNameInput.value || 'BRAND NAME';
+                productNameDisplay.textContent = productNameInput.value || 'Product Name';
+                
+                if (logoUrlInput.value) {
+                    brandLogo.src = logoUrlInput.value;
+                    brandLogo.onerror = function() {
+                        console.error("Error loading logo image, using fallback");
+                        this.src = 'https://placehold.co/200x80?text=Brand+Logo';
+                    };
+                }
+                
+                if (productImageUrlInput.value) {
+                    productImage.src = productImageUrlInput.value;
+                    productImage.onerror = function() {
+                        console.error("Error loading product image, using fallback");
+                        this.src = 'https://placehold.co/540x500?text=Product+Image';
+                    };
+                }
+                
+                // Update color theme
+                postcardLeft.style.backgroundColor = brandColorInput.value;
+                console.log("Postcard display updated");
+            }
+            
+            // Function to extract website data using the serverless function
+            async function extractWebsiteData(url) {
+                try {
+                    console.log(`Attempting to fetch data from: /.netlify/functions/scrape for URL: ${url}`);
+                    
+                    // If we're running locally, might need to modify the path
+                    const functionPath = '/.netlify/functions/scrape';
+                    
+                    const response = await fetch(functionPath, {
+                        method: 'POST',
+                        body: JSON.stringify({ url }),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    console.log("Function response status:", response.status);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error("Error response body:", errorText);
+                        throw new Error(`Failed to scrape website: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log("Received data from function:", data);
+                    return data;
+                } catch (error) {
+                    console.error('Error calling scrape function:', error);
+                    throw error;
+                }
+            }
+
+            // Add a test button click to make sure the event listeners are working
+            console.log("DOMContentLoaded event fired, all event listeners should be set up");
+            document.getElementById("postcardForm").addEventListener("submit", async function (e) {
+                e.preventDefault();
+
+                const urlInput = document.getElementById("websiteUrl").value;
+                if (!urlInput) {
+                    alert("Please enter a website URL");
+                    return;
+                }
+
+                try {
+                    const data = await extractWebsiteData(urlInput);
+                    console.log("Data received:", data);
+                    updatePostcard(data);
+                } catch (error) {
+                    alert("Failed to generate postcard. See console for details.");
+                }
+            });
+
+            function updatePostcard(data) {
+                const brandName = data.brandName || "Brand Name";
+                const logoUrl = data.logoUrl || "";
+                const productImageUrl = data.productImageUrl || "";
+                const brandColor = data.brandColor || "#1F2937";
+
+                const postcardLeft = document.getElementById("postcard-left");
+                const postcardRight = document.getElementById("postcard-right");
+
+                document.getElementById("brandName").textContent = brandName;
+                postcardLeft.style.backgroundColor = brandColor;
+
+                const logoImg = document.getElementById("logo");
+                if (logoUrl) {
+                    logoImg.src = logoUrl;
+                    logoImg.style.display = "block";
+                } else {
+                    logoImg.style.display = "none";
+                }
+
+                const productImg = document.getElementById("productImage");
+                if (productImageUrl) {
+                    productImg.src = productImageUrl;
+                    productImg.style.display = "block";
+                } else {
+                    productImg.style.display = "none";
+                }
+            }
+
+        });
+    </script>
+</body>
+</html>

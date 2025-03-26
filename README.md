@@ -1,2 +1,0 @@
-# postcard-generator
-Generates postcards. 

@@ -24,18 +24,18 @@
     body {
       font-family: "Merriweather", serif;
     }
+    /* 
+      Maintain a 9:5 aspect ratio and scale for smaller screens.
+      Adjust if you prefer a different ratio.
+    */
     .postcard {
-      /* 
-        Maintain a 9:5 aspect ratio and scale down for smaller screens.
-        Adjust as desired to match your template's proportions.
-      */
       position: relative;
       width: 100%;
       max-width: 900px;
       aspect-ratio: 9 / 5;
       display: flex;
       overflow: hidden;
-      border-radius: 0.5rem; /* Slight rounding */
+      border-radius: 0.5rem;
     }
     .download-button {
       position: relative;
@@ -106,16 +106,16 @@
           <!-- Left side: brand color background -->
           <div
             id="postcard-left"
-            class="flex flex-col justify-center text-white w-2/5 p-6"
+            class="w-2/5 p-6 flex flex-col justify-center items-center text-center text-white"
             style="background-color: #1F2937"
           >
             <!-- Brand Logo or fallback brand name -->
-            <div class="flex items-center mb-4">
+            <div class="mb-4">
               <img
                 id="logo"
                 src=""
                 alt="Brand Logo"
-                class="h-12 w-auto mr-4"
+                class="h-12 w-auto mx-auto"
                 style="display: none;"
               />
               <h2
@@ -126,11 +126,11 @@
             </div>
 
             <!-- Greeting & Offer Text -->
-            <div>
-              <p class="text-xl mb-2">Hello, Amanda!</p>
-              <p class="mb-1">Shop Our Sale Today</p>
-              <p class="mb-1">Get up to <strong>20% OFF</strong></p>
-              <p class="mb-4">
+            <div class="space-y-2 max-w-[90%]">
+              <p class="text-xl">Hello, Amanda!</p>
+              <p>Shop Our Sale Today</p>
+              <p>Get up to <strong>20% OFF</strong></p>
+              <p>
                 Use code:
                 <span
                   id="couponCode"
@@ -143,23 +143,20 @@
             </div>
 
             <!-- Product info -->
-            <div class="mt-4">
-              <h3 id="productName" class="text-lg font-semibold"></h3>
-              <p id="productPrice" class="text-sm"></p>
-              <p id="brandURL" class="text-sm"></p>
+            <div class="mt-6 space-y-1 max-w-[90%]">
+              <h3 id="productName" class="text-lg font-semibold leading-tight"></h3>
+              <p id="productPrice" class="text-sm leading-tight"></p>
+              <p id="brandURL" class="text-sm leading-tight"></p>
             </div>
           </div>
 
-          <!-- Right side: product image -->
-          <div
-            id="postcard-right"
-            class="flex-1 flex items-center justify-center bg-gray-100"
-          >
+          <!-- Right side: product image (fill entire area) -->
+          <div id="postcard-right" class="flex-1 relative">
             <img
               id="productImage"
               src=""
               alt="Product"
-              class="max-w-full max-h-full object-cover"
+              class="absolute inset-0 w-full h-full object-cover"
               style="display: none;"
             />
           </div>
@@ -173,7 +170,7 @@
         >
           <div
             id="fallbackPanel"
-            class="w-full h-full flex flex-col items-center justify-center"
+            class="w-full h-full flex flex-col items-center justify-center p-6"
             style="background-color: #1F2937;"
           >
             <h2 id="fallbackBrandName" class="text-3xl font-bold mb-4"></h2>
@@ -185,7 +182,6 @@
   </div>
 
   <script>
-    // Global product data
     let allProducts = [];
     let currentProductIndex = 0;
 
@@ -209,18 +205,18 @@
           const data = await extractWebsiteData(urlInput);
           console.log("Scraped data:", data);
 
-          // Save brand-level info
-          brandData = {
+          // Prepare brand-level info
+          const brandData = {
             brandName: data.brandName || "Brand Name",
             brandDomain: data.brandDomain || "",
             brandColor: data.brandColor || "#1F2937",
             logoUrl: data.logoUrl || "",
           };
 
-          // Load all products
+          // Load products array
           allProducts = data.products || [];
           if (!Array.isArray(allProducts) || allProducts.length === 0) {
-            // No products found, create a single "empty" product to fallback on
+            // No products found => single fallback item
             allProducts = [
               {
                 productName: "",
@@ -229,9 +225,9 @@
               },
             ];
           }
-
           currentProductIndex = 0;
-          // If there's more than one product, show "Try Another Product" button
+
+          // Show "Try Another Product" only if multiple items
           nextProductBtn.style.display =
             allProducts.length > 1 ? "inline-block" : "none";
 
@@ -242,7 +238,7 @@
         }
       });
 
-      // NEXT PRODUCT: cycle through product array
+      // NEXT PRODUCT: cycle through products
       nextProductBtn.addEventListener("click", () => {
         if (allProducts.length < 2) return;
         currentProductIndex = (currentProductIndex + 1) % allProducts.length;
@@ -252,10 +248,10 @@
 
       // DOWNLOAD: capture postcard
       document.getElementById("downloadButton").addEventListener("click", () => {
-        // If fallback is visible, capture fallback. Else normal
-        const target = postcardFallback.style.display === "none"
-          ? postcardNormal
-          : postcardFallback;
+        const target =
+          postcardFallback.style.display === "none"
+            ? postcardNormal
+            : postcardFallback;
 
         html2canvas(target).then((canvas) => {
           const link = document.createElement("a");
@@ -266,7 +262,7 @@
       });
     });
 
-    // Simple store for brand data so we can re‐use in nextProduct
+    // Retrieve current brand data from the normal postcard panel
     function getCurrentBrandData() {
       return {
         brandName: document.getElementById("brandName").textContent,
@@ -294,11 +290,9 @@
 
     // Update the postcard with brand & product data
     function updatePostcard(brandData, productData) {
-      // Check if brand or product image is missing
       const hasBrandImage = !!brandData.logoUrl;
       const hasProductImage = !!productData.productImageUrl;
 
-      // If missing brand or product image => fallback
       if (!hasBrandImage || !hasProductImage) {
         showFallback(brandData);
       } else {
@@ -310,20 +304,20 @@
     function showNormal(brandData, productData) {
       // Hide fallback, show normal
       document.getElementById("postcardFallback").style.display = "none";
-      document.getElementById("postcardNormal").style.display = "flex";
+      const postcardNormal = document.getElementById("postcardNormal");
+      postcardNormal.style.display = "flex";
 
-      // Left side background color
+      // Background color
       const leftPanel = document.getElementById("postcard-left");
       leftPanel.style.backgroundColor = brandData.brandColor || "#1F2937";
 
-      // Decide text color for coupon border, etc. (simple contrast check)
-      const borderColor = getContrastColor(brandData.brandColor || "#1F2937");
-      document.getElementById("couponCode").style.borderColor = borderColor;
+      // Dynamic coupon border color for contrast
+      const couponCode = document.getElementById("couponCode");
+      couponCode.style.borderColor = getContrastColor(brandData.brandColor);
 
-      // Logo vs brand name
+      // Logo or brand name
       const logoEl = document.getElementById("logo");
       const brandNameEl = document.getElementById("brandName");
-
       if (brandData.logoUrl) {
         logoEl.src = brandData.logoUrl;
         logoEl.style.display = "block";
@@ -334,11 +328,14 @@
         brandNameEl.textContent = brandData.brandName;
       }
 
-      // Product details
-      document.getElementById("productName").textContent = productData.productName || "";
-      document.getElementById("productPrice").textContent = productData.productPrice || "";
-      document.getElementById("brandURL").textContent =
-        brandData.brandDomain ? `Brand URL: ${brandData.brandDomain}` : "";
+      // Product name & price
+      document.getElementById("productName").textContent =
+        productData.productName || "";
+      document.getElementById("productPrice").textContent =
+        productData.productPrice || "";
+
+      // Domain (no prefix)
+      document.getElementById("brandURL").textContent = brandData.brandDomain;
 
       // Product image
       const productImgEl = document.getElementById("productImage");
@@ -358,27 +355,25 @@
       fallback.style.display = "flex";
 
       const fallbackPanel = document.getElementById("fallbackPanel");
-      // Brand color
       fallbackPanel.style.backgroundColor = brandData.brandColor || "#1F2937";
 
-      // Decide text color for high contrast
       const textColor = getContrastColor(brandData.brandColor || "#1F2937");
       fallbackPanel.style.color = textColor;
 
-      // Set brand name & domain
-      document.getElementById("fallbackBrandName").textContent = brandData.brandName;
-      document.getElementById("fallbackBrandURL").textContent = brandData.brandDomain
-        ? brandData.brandDomain
-        : "";
+      // Fallback brand name & domain
+      document.getElementById("fallbackBrandName").textContent =
+        brandData.brandName;
+      document.getElementById("fallbackBrandURL").textContent =
+        brandData.brandDomain;
     }
 
     // Simple contrast check: returns "#000" or "#fff"
     function getContrastColor(bgHex) {
       const hex = bgHex.replace("#", "");
       // parse R,G,B
-      const r = parseInt(hex.substr(0, 2), 16);
-      const g = parseInt(hex.substr(2, 2), 16);
-      const b = parseInt(hex.substr(4, 2), 16);
+      const r = parseInt(hex.substr(0, 2), 16) || 0;
+      const g = parseInt(hex.substr(2, 2), 16) || 0;
+      const b = parseInt(hex.substr(4, 2), 16) || 0;
       // YIQ formula
       const yiq = (r * 299 + g * 587 + b * 114) / 1000;
       return yiq >= 128 ? "#000" : "#fff";

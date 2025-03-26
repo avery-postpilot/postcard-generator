@@ -32,7 +32,7 @@ exports.handler = async function(event, context) {
 
     console.log(`Scraping URL: ${url}`);
 
-    // Make sure URL has protocol
+    // Ensure URL has a protocol
     let fullUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       fullUrl = `https://${url}`;
@@ -46,52 +46,48 @@ exports.handler = async function(event, context) {
         'Accept-Language': 'en-US,en;q=0.5',
         'Referer': 'https://www.google.com/'
       },
-      timeout: 10000, // 10 second timeout
+      timeout: 10000,
       maxRedirects: 5
     });
 
     const html = response.data;
     const $ = cheerio.load(html);
 
-    // Extract brand information
+    // Initialize results object
     const results = {
       brandName: '',
       logoUrl: '',
       productName: '',
+      productPrice: '',
       productImageUrl: '',
-      brandColor: '#1F2937', // Default color
+      brandColor: '#1F2937'
     };
 
     // Extract domain for fallbacks
     const domain = new URL(response.request.res.responseUrl).hostname.replace('www.', '');
 
-    // Extract brand name
-    // Try common meta tags first
+    // Extract Brand Name
     results.brandName = $('meta[property="og:site_name"]').attr('content') ||
-                         $('meta[name="application-name"]').attr('content') ||
-                         $('meta[name="twitter:site"]').attr('content');
-
-    // If no brand name found yet, try the title tag
+                        $('meta[name="application-name"]').attr('content') ||
+                        $('meta[name="twitter:site"]').attr('content');
     if (!results.brandName) {
       const title = $('title').text().trim();
       if (title) {
-        // Split by common separators and take the first part
         results.brandName = title.split(/\s+[|\-–—]\s+/)[0].trim();
       }
     }
-
-    // If still no brand name, use the domain name
     if (!results.brandName) {
       results.brandName = domain.split('.')[0];
     }
-
-    // Convert brand name to Title Case and clean up
     results.brandName = results.brandName
       .replace(/@/g, '')
       .replace(/^\./, '')
       .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
 
-    // Extract logo
+    // Attempt to extract brand color from meta tag
+    results.brandColor = $('meta[name="theme-color"]').attr('content') || results.brandColor;
+
+    // Extract Logo
     const logoSelectors = [
       'header img[src*="logo"]',
       '.logo img',
@@ -102,8 +98,6 @@ exports.handler = async function(event, context) {
       'img[id*="logo" i]',
       'img[class*="logo" i]'
     ];
-
-    // Try to find logo using selectors
     for (const selector of logoSelectors) {
       const logo = $(selector).first();
       if (logo.length) {
@@ -111,13 +105,10 @@ exports.handler = async function(event, context) {
         if (logoSrc) {
           const baseUrl = new URL(response.request.res.responseUrl);
           if (logoSrc.startsWith('//')) {
-            // Protocol-relative URL: add protocol only
             logoSrc = `${baseUrl.protocol}${logoSrc}`;
           } else if (logoSrc.startsWith('/')) {
-            // Relative URL: add protocol and host
             logoSrc = `${baseUrl.protocol}//${baseUrl.host}${logoSrc}`;
           } else if (!logoSrc.startsWith('http')) {
-            // Other relative URL forms
             logoSrc = `${baseUrl.protocol}//${baseUrl.host}/${logoSrc}`;
           }
           results.logoUrl = logoSrc;
@@ -125,14 +116,11 @@ exports.handler = async function(event, context) {
         }
       }
     }
-
-    // If no logo found, try Clearbit as fallback
     if (!results.logoUrl) {
       results.logoUrl = `https://logo.clearbit.com/${domain}`;
     }
 
-    // Extract product information
-    // Look for product sections that may indicate bestsellers or featured products
+    // Extract Product Information
     const productSelectors = [
       '.product-card', 
       '.product-item',
@@ -146,21 +134,16 @@ exports.handler = async function(event, context) {
       '.product',
       'article'
     ];
-
     let foundProduct = false;
-
     for (const selector of productSelectors) {
       const products = $(selector);
       if (products.length > 0) {
-        // Get the first product
         const product = products.first();
-
-        // Get product name
+        // Extract product name
         const productNameSelectors = [
           'h2', 'h3', '.product-title', '.product-name',
           '[class*="title"]', '[class*="name"]', 'h4'
         ];
-
         for (const nameSelector of productNameSelectors) {
           const nameElement = product.find(nameSelector).first();
           if (nameElement.length && nameElement.text().trim()) {
@@ -168,8 +151,12 @@ exports.handler = async function(event, context) {
             break;
           }
         }
-
-        // Get product image
+        // Extract product price using selectors with "price"
+        const priceElement = product.find('[class*="price"]').first();
+        if (priceElement.length && priceElement.text().trim()) {
+          results.productPrice = priceElement.text().trim();
+        }
+        // Extract product image
         const imgElement = product.find('img').first();
         if (imgElement.length) {
           let imgSrc = imgElement.attr('src') || imgElement.attr('data-src');
@@ -190,7 +177,7 @@ exports.handler = async function(event, context) {
       }
     }
 
-    // Return the results
+    // Return scraped results
     return {
       statusCode: 200,
       headers,

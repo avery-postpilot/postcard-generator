@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>PostPilot Postcard Generator</title>
+  <!-- Tailwind CSS & html2canvas -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
   <style>
     .postcard {
       width: 900px;
@@ -13,23 +15,13 @@
       position: relative;
       overflow: hidden;
     }
-    .loader {
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #3498db;
-      border-radius: 50%;
-      width: 30px;
-      height: 30px;
-      animation: spin 2s linear infinite;
-      margin: 20px auto;
+    .download-button {
+      position: relative;
+      z-index: 10; /* Ensure button is above any overlapping elements */
     }
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
-    }
-    /* Ensure the download button appears above any overlapping elements */
-    .download-button {
-      position: relative;
-      z-index: 10;
     }
   </style>
 </head>
@@ -39,137 +31,196 @@
       <h1 class="text-3xl font-bold text-center text-gray-800">PostPilot Postcard Generator</h1>
       <p class="text-center text-gray-600">Generate custom marketing postcards for email outreach</p>
     </header>
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <!-- Left Panel: Settings and Preview -->
+
+    <!-- Two-column layout: left for form, right for postcard preview -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <!-- Left column: Settings -->
       <div class="bg-white p-6 rounded-lg shadow-md">
         <h2 class="text-xl font-semibold mb-4">Settings</h2>
         <form id="postcardForm" class="space-y-4">
           <div>
             <label for="websiteUrl" class="block text-sm font-medium text-gray-700">Website URL</label>
-            <input type="url" id="websiteUrl" name="websiteUrl" placeholder="https://example.com" class="mt-1 block w-full border border-gray-300 rounded-md" required />
+            <input
+              type="url"
+              id="websiteUrl"
+              name="websiteUrl"
+              placeholder="https://example.com"
+              class="mt-1 block w-full border border-gray-300 rounded-md"
+              required
+            />
           </div>
           <div>
-            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+            <button
+              type="submit"
+              class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+            >
               Generate Postcard
             </button>
           </div>
         </form>
-        <!-- Postcard Preview -->
-        <div class="mt-10">
-          <h2 class="text-xl font-semibold mb-4">Preview</h2>
-          <div class="postcard bg-white shadow-lg rounded-lg overflow-hidden flex">
-            <!-- Left side: Brand details -->
-            <div id="postcard-left" class="w-1/2 p-6 flex flex-col justify-center items-center text-white" style="background-color: #1F2937;">
-              <img id="logo" src="" alt="Brand Logo" class="mb-4 max-h-24" style="display:none;" />
-              <h3 id="brandName" class="text-2xl font-bold">Brand Name</h3>
-            </div>
-            <!-- Right side: Product details -->
-            <div id="postcard-right" class="w-1/2 bg-gray-100 flex flex-col items-center justify-center">
-              <img id="productImage" src="" alt="Product" class="max-h-full max-w-full object-contain" style="display:none;" />
-              <div id="productDetails" class="mt-4 text-center">
-                <h3 id="productName" class="text-xl font-bold"></h3>
-                <p id="productPrice" class="text-lg"></p>
-              </div>
-            </div>
-          </div>
-        </div>
+
         <!-- Download Button -->
-        <div class="mt-4">
-          <button id="downloadButton" class="download-button bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+        <div class="mt-6">
+          <button
+            id="downloadButton"
+            class="download-button bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+          >
             Download Postcard
           </button>
         </div>
       </div>
-      <!-- Right Panel: Additional Content (if needed) -->
-      <div class="lg:col-span-2">
-        <p class="text-gray-700">
-          Additional marketing materials or instructions can be added here.
-        </p>
+
+      <!-- Right column: Postcard Preview -->
+      <div>
+        <h2 class="text-xl font-semibold mb-4">Preview</h2>
+        <div class="postcard bg-white shadow-lg rounded-lg flex">
+          <!-- Left side of postcard: brand & message -->
+          <div
+            id="postcard-left"
+            class="w-1/2 p-6 flex flex-col justify-center text-white"
+            style="background-color: #1F2937"
+          >
+            <!-- Brand Header -->
+            <div class="flex items-center mb-4">
+              <img
+                id="logo"
+                src=""
+                alt="Brand Logo"
+                class="h-12 w-auto mr-4"
+                style="display: none;"
+              />
+              <h2
+                id="brandName"
+                class="text-2xl font-bold"
+              >
+                Brand Name
+              </h2>
+            </div>
+
+            <!-- Static greeting & coupon code -->
+            <div>
+              <p class="text-xl mb-2">Hello, Amanda!</p>
+              <p class="mb-1">Shop Our Sale Today</p>
+              <p class="mb-1">Get up to 20% OFF</p>
+              <p class="mb-4">
+                Use code: <span class="font-bold">DIRECTMAIL20</span>
+              </p>
+            </div>
+
+            <!-- Product name, price, brand URL -->
+            <div class="mt-4">
+              <h3 id="productName" class="text-lg font-semibold"></h3>
+              <p id="productPrice" class="text-sm"></p>
+              <p id="brandURL" class="text-sm"></p>
+            </div>
+          </div>
+
+          <!-- Right side of postcard: product image -->
+          <div
+            id="postcard-right"
+            class="w-1/2 flex items-center justify-center bg-gray-100"
+          >
+            <img
+              id="productImage"
+              src=""
+              alt="Product"
+              class="max-w-full max-h-full object-cover"
+              style="display: none;"
+            />
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <script>
-    document.addEventListener("DOMContentLoaded", function() {
-      console.log("DOMContentLoaded event fired, event listeners are set up.");
 
-      // Form submission event listener
-      document.getElementById("postcardForm").addEventListener("submit", async function (e) {
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      console.log("DOMContentLoaded - event listeners ready.");
+
+      // Form submission
+      document.getElementById("postcardForm").addEventListener("submit", async (e) => {
         e.preventDefault();
-        const urlInput = document.getElementById("websiteUrl").value;
+        const urlInput = document.getElementById("websiteUrl").value.trim();
         if (!urlInput) {
-          alert("Please enter a website URL");
+          alert("Please enter a website URL.");
           return;
         }
         try {
           const data = await extractWebsiteData(urlInput);
-          console.log("Data received:", data);
+          console.log("Scraped data:", data);
           updatePostcard(data);
         } catch (error) {
-          alert("Failed to generate postcard. See console for details.");
+          alert("Failed to generate postcard. Check console for details.");
+          console.error(error);
         }
       });
 
-      // Function to call the Netlify scrape function
+      // Netlify function call
       async function extractWebsiteData(url) {
-        try {
-          console.log(`Fetching data from: /.netlify/functions/scrape for URL: ${url}`);
-          const functionPath = '/.netlify/functions/scrape';
-          const response = await fetch(functionPath, {
-            method: 'POST',
-            body: JSON.stringify({ url }),
-            headers: { 'Content-Type': 'application/json' }
-          });
-          console.log("Function response status:", response.status);
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Error response:", errorText);
-            throw new Error(`Failed to scrape website: ${response.status} ${response.statusText}`);
-          }
-          const data = await response.json();
-          return data;
-        } catch (error) {
-          console.error('Error calling scrape function:', error);
-          throw error;
+        const functionPath = "/.netlify/functions/scrape";
+        const response = await fetch(functionPath, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Scrape function error:", errorText);
+          throw new Error(`Scrape failed: ${response.status} ${response.statusText}`);
         }
+        return await response.json();
       }
 
-      // Update the postcard preview with scraped data
+      // Update postcard preview
       function updatePostcard(data) {
-        // Update brand details
+        // Brand details
         const brandName = data.brandName || "Brand Name";
-        const logoUrl = data.logoUrl || "";
         const brandColor = data.brandColor || "#1F2937";
-        document.getElementById("brandName").textContent = brandName;
-        document.getElementById("postcard-left").style.backgroundColor = brandColor;
+        const logoUrl = data.logoUrl || "";
+        const domain = data.brandDomain || "";
 
-        const logoImg = document.getElementById("logo");
-        if (logoUrl) {
-          logoImg.src = logoUrl;
-          logoImg.style.display = "block";
-        } else {
-          logoImg.style.display = "none";
-        }
-
-        // Update product details
-        const productImageUrl = data.productImageUrl || "";
+        // Product details
         const productName = data.productName || "";
         const productPrice = data.productPrice || "";
-        const productImg = document.getElementById("productImage");
-        if (productImageUrl) {
-          productImg.src = productImageUrl;
-          productImg.style.display = "block";
+        const productImgUrl = data.productImageUrl || "";
+
+        // Set brand color background
+        document.getElementById("postcard-left").style.backgroundColor = brandColor;
+
+        // Brand name
+        document.getElementById("brandName").textContent = brandName;
+
+        // Logo
+        const logoEl = document.getElementById("logo");
+        if (logoUrl) {
+          logoEl.src = logoUrl;
+          logoEl.style.display = "block";
         } else {
-          productImg.style.display = "none";
+          logoEl.style.display = "none";
         }
+
+        // Product name & price
         document.getElementById("productName").textContent = productName;
         document.getElementById("productPrice").textContent = productPrice;
+
+        // Brand domain (URL)
+        document.getElementById("brandURL").textContent = domain ? `Brand URL: ${domain}` : "";
+
+        // Product image
+        const productImgEl = document.getElementById("productImage");
+        if (productImgUrl) {
+          productImgEl.src = productImgUrl;
+          productImgEl.style.display = "block";
+        } else {
+          productImgEl.style.display = "none";
+        }
       }
 
-      // Download postcard using html2canvas
-      document.getElementById("downloadButton").addEventListener("click", function() {
-        html2canvas(document.querySelector('.postcard')).then(canvas => {
-          const link = document.createElement('a');
-          link.download = 'postcard.png';
+      // Download Postcard
+      document.getElementById("downloadButton").addEventListener("click", () => {
+        html2canvas(document.querySelector(".postcard")).then((canvas) => {
+          const link = document.createElement("a");
+          link.download = "postcard.png";
           link.href = canvas.toDataURL();
           link.click();
         });

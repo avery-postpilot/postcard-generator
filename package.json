@@ -2,7 +2,6 @@
   "name": "postcard-generator",
   "version": "1.0.0",
   "description": "Postcard generator tool for PostPilot",
-  "main": "index.html",
   "scripts": {
     "start": "netlify dev"
   },

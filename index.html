@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PostPilot Postcard Generator</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Using CDN links for easy deployment -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <style>
         .postcard {
             width: 900px;
@@ -13,37 +14,18 @@
             position: relative;
             overflow: hidden;
         }
-        .template-preview {
-            width: 100px;
-            height: 60px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .template-preview:hover {
-            transform: scale(1.05);
-        }
-        .template-selected {
-            border: 3px solid #3B82F6;
-        }
         .loader {
-            border-top-color: #3B82F6;
-            -webkit-animation: spinner 1.5s linear infinite;
-            animation: spinner 1.5s linear infinite;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
         }
-        @-webkit-keyframes spinner {
-            0% { -webkit-transform: rotate(0deg); }
-            100% { -webkit-transform: rotate(360deg); }
-        }
-        @keyframes spinner {
+        @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
-        }
-        #colorPicker {
-            height: 30px;
-            width: 100%;
-            padding: 0;
-            border: none;
-            background: none;
         }
     </style>
 </head>
@@ -66,36 +48,6 @@
                             class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                             required>
                     </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Business Category</label>
-                        <div class="grid grid-cols-3 gap-2 mt-2">
-                            <div class="template-option">
-                                <img src="/api/placeholder/100/60" alt="Home & Garden Template" class="template-preview template-selected" data-template="home">
-                                <p class="text-xs text-center mt-1">Home & Garden</p>
-                            </div>
-                            <div class="template-option">
-                                <img src="/api/placeholder/100/60" alt="Apparel Template" class="template-preview" data-template="apparel">
-                                <p class="text-xs text-center mt-1">Apparel</p>
-                            </div>
-                            <div class="template-option">
-                                <img src="/api/placeholder/100/60" alt="Beauty Template" class="template-preview" data-template="beauty">
-                                <p class="text-xs text-center mt-1">Beauty</p>
-                            </div>
-                            <div class="template-option">
-                                <img src="/api/placeholder/100/60" alt="Electronics Template" class="template-preview" data-template="electronics">
-                                <p class="text-xs text-center mt-1">Electronics</p>
-                            </div>
-                            <div class="template-option">
-                                <img src="/api/placeholder/100/60" alt="Food & Beverage Template" class="template-preview" data-template="food">
-                                <p class="text-xs text-center mt-1">Food & Beverage</p>
-                            </div>
-                            <div class="template-option">
-                                <img src="/api/placeholder/100/60" alt="Baby & Toddler Template" class="template-preview" data-template="baby">
-                                <p class="text-xs text-center mt-1">Baby & Toddler</p>
-                            </div>
-                        </div>
-                    </div>
 
                     <div class="border-t border-gray-200 pt-4">
                         <button type="button" id="generateBtn" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -105,39 +57,14 @@
                 </form>
 
                 <div id="generatingState" class="hidden mt-4">
-                    <div class="flex justify-center items-center">
-                        <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12"></div>
-                    </div>
+                    <div class="loader"></div>
                     <p class="text-center mt-2 text-gray-600">Generating postcard...</p>
                 </div>
 
-                <div id="extractedInfo" class="hidden mt-6 border-t border-gray-200 pt-4">
+                <div id="customizationForm" class="hidden mt-6 border-t border-gray-200 pt-4">
                     <h3 class="text-lg font-medium mb-3">Customize Elements</h3>
                     
                     <div class="space-y-3">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Brand Logo</label>
-                            <div class="flex mt-1">
-                                <img id="extractedLogo" src="/api/placeholder/100/40" alt="Extracted Logo" class="h-10 mr-2 border border-gray-300">
-                                <input type="url" id="logoUrl" placeholder="Custom logo URL" class="flex-1 border border-gray-300 rounded-md shadow-sm p-2 text-sm">
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Brand Colors</label>
-                            <div class="mt-1">
-                                <input type="color" id="colorPicker" value="#000000">
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Product Image</label>
-                            <div class="flex mt-1">
-                                <img id="extractedProduct" src="/api/placeholder/100/60" alt="Product Image" class="h-14 mr-2 border border-gray-300">
-                                <input type="url" id="productUrl" placeholder="Custom product URL" class="flex-1 border border-gray-300 rounded-md shadow-sm p-2 text-sm">
-                            </div>
-                        </div>
-                        
                         <div>
                             <label for="brandName" class="block text-sm font-medium text-gray-700">Brand Name</label>
                             <input type="text" id="brandName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
@@ -146,6 +73,21 @@
                         <div>
                             <label for="productName" class="block text-sm font-medium text-gray-700">Product Name</label>
                             <input type="text" id="productName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+                        
+                        <div>
+                            <label for="logoUrl" class="block text-sm font-medium text-gray-700">Logo URL</label>
+                            <input type="url" id="logoUrl" placeholder="https://example.com/logo.png" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+                        
+                        <div>
+                            <label for="productImageUrl" class="block text-sm font-medium text-gray-700">Product Image URL</label>
+                            <input type="url" id="productImageUrl" placeholder="https://example.com/product.jpg" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                        </div>
+                        
+                        <div>
+                            <label for="brandColor" class="block text-sm font-medium text-gray-700">Brand Color</label>
+                            <input type="color" id="brandColor" value="#1F2937" class="mt-1 block w-full h-10 p-0 border-0">
                         </div>
 
                         <div>
@@ -157,18 +99,18 @@
                 </div>
             </div>
 
-            <!-- Middle panel - Postcard preview -->
+            <!-- Right panel - Postcard preview -->
             <div class="lg:col-span-2">
                 <div class="bg-white p-6 rounded-lg shadow-md">
                     <h2 class="text-xl font-semibold mb-4">Postcard Preview</h2>
                     
-                    <div id="postcardContainer" class="overflow-hidden flex justify-center">
+                    <div id="postcardContainer" class="overflow-auto flex justify-center">
                         <div id="postcard" class="postcard flex shadow-lg rounded-lg">
                             <!-- Left side (dark) of the postcard -->
                             <div class="w-2/5 bg-gray-800 p-8 flex flex-col justify-between">
                                 <div>
-                                    <div class="mb-6">
-                                        <img id="brandLogo" src="/api/placeholder/120/60" alt="Brand Logo" class="h-16">
+                                    <div class="mb-6 h-16 flex items-center">
+                                        <img id="brandLogo" src="https://placehold.co/200x80?text=Brand+Logo" alt="Brand Logo" class="max-h-16">
                                     </div>
                                     <h1 id="brandNameDisplay" class="text-white text-3xl font-bold mb-1">BRAND NAME</h1>
                                 </div>
@@ -194,7 +136,7 @@
                             
                             <!-- Right side (image) of the postcard -->
                             <div class="w-3/5 bg-cover bg-center" id="productImageContainer">
-                                <img id="productImage" src="/api/placeholder/540/500" alt="Product Image" class="w-full h-full object-cover">
+                                <img id="productImage" src="https://placehold.co/540x500?text=Product+Image" alt="Product Image" class="w-full h-full object-cover">
                             </div>
                         </div>
                     </div>
@@ -211,47 +153,27 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Select elements
+            // DOM Elements
             const generateBtn = document.getElementById('generateBtn');
             const updateBtn = document.getElementById('updateBtn');
             const downloadBtn = document.getElementById('downloadBtn');
             const websiteUrlInput = document.getElementById('websiteUrl');
-            const extractedInfo = document.getElementById('extractedInfo');
+            const customizationForm = document.getElementById('customizationForm');
             const generatingState = document.getElementById('generatingState');
-            const templatePreviews = document.querySelectorAll('.template-preview');
-            const colorPicker = document.getElementById('colorPicker');
+            
+            // Form inputs
+            const brandNameInput = document.getElementById('brandName');
+            const productNameInput = document.getElementById('productName');
+            const logoUrlInput = document.getElementById('logoUrl');
+            const productImageUrlInput = document.getElementById('productImageUrl');
+            const brandColorInput = document.getElementById('brandColor');
             
             // Postcard elements
             const brandLogo = document.getElementById('brandLogo');
             const brandNameDisplay = document.getElementById('brandNameDisplay');
             const productNameDisplay = document.getElementById('productNameDisplay');
             const productImage = document.getElementById('productImage');
-            const extractedLogo = document.getElementById('extractedLogo');
-            const extractedProduct = document.getElementById('extractedProduct');
-            
-            // Form inputs for customization
-            const logoUrlInput = document.getElementById('logoUrl');
-            const productUrlInput = document.getElementById('productUrl');
-            const brandNameInput = document.getElementById('brandName');
-            const productNameInput = document.getElementById('productName');
-            
-            // Current template selection
-            let currentTemplate = 'home';
-            
-            // Handle template selection
-            templatePreviews.forEach(preview => {
-                preview.addEventListener('click', function() {
-                    // Remove selected class from all previews
-                    templatePreviews.forEach(p => p.classList.remove('template-selected'));
-                    // Add selected class to clicked preview
-                    this.classList.add('template-selected');
-                    // Update current template
-                    currentTemplate = this.dataset.template;
-                    
-                    // Update template styles
-                    updateTemplateStyle(currentTemplate);
-                });
-            });
+            const postcardLeft = document.querySelector('.postcard .w-2/5');
             
             // Generate button click
             generateBtn.addEventListener('click', async function() {
@@ -264,87 +186,53 @@
                 
                 // Show generating state
                 generatingState.classList.remove('hidden');
+                customizationForm.classList.add('hidden');
+                downloadBtn.disabled = true;
                 
                 try {
-                    // Call the scraper function
-                    // In production, this would use the actual API endpoint
-                    // For GitHub Pages deployment, we'll fall back to simulated data if no API is available
-                    let extractedData;
+                    // Extract information from URL using the serverless function
+                    const extractedData = await extractWebsiteData(websiteUrl);
                     
-                    try {
-                        // Try to call the serverless function
-                        const response = await fetch('/.netlify/functions/scrape', {
-                            method: 'POST',
-                            body: JSON.stringify({ url: websiteUrl }),
-                            headers: { 'Content-Type': 'application/json' }
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error('API call failed');
-                        }
-                        
-                        extractedData = await response.json();
-                    } catch (error) {
-                        console.warn('API call failed, using fallback data:', error);
-                        // Fallback to simulated data for GitHub Pages or if API fails
-                        extractedData = simulateExtraction(websiteUrl, currentTemplate);
-                    }
+                    // Update form fields with extracted data
+                    brandNameInput.value = extractedData.brandName || 'Brand Name';
+                    productNameInput.value = extractedData.productName || 'Featured Product';
+                    logoUrlInput.value = extractedData.logoUrl || '';
+                    productImageUrlInput.value = extractedData.productImageUrl || '';
+                    brandColorInput.value = extractedData.brandColor || '#1F2937';
                     
-                    // If no product name was found, use template-specific one
-                    if (!extractedData.productName) {
-                        extractedData.productName = getProductNameByTemplate(currentTemplate);
-                    }
+                    // Update postcard displays
+                    updatePostcardDisplay();
                     
-                    // If no product image was found, use template-specific one
-                    if (!extractedData.productImageUrl) {
-                        extractedData.productImageUrl = getProductImageByTemplate(currentTemplate);
-                    }
+                    // Show customization form
+                    customizationForm.classList.remove('hidden');
+                    downloadBtn.disabled = false;
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Failed to extract data from the website. Please try a different URL or enter information manually.');
                     
-                    // Update the form fields
-                    brandNameInput.value = extractedData.brandName;
-                    productNameInput.value = extractedData.productName;
-                    logoUrlInput.value = extractedData.logoUrl;
-                    productUrlInput.value = extractedData.productImageUrl;
-                    colorPicker.value = extractedData.brandColor;
+                    // Fill with fallback data so user can proceed
+                    const domain = websiteUrlInput.value.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+                    const brandName = domain.split('.')[0].replace(/\w\S*/g, 
+                        txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
                     
-                    // Update the postcard
-                    brandNameDisplay.textContent = simulatedResults.brandName;
-                    productNameDisplay.textContent = simulatedResults.productName;
-                    brandLogo.src = simulatedResults.logoUrl;
-                    extractedLogo.src = simulatedResults.logoUrl;
-                    productImage.src = simulatedResults.productImageUrl;
-                    extractedProduct.src = simulatedResults.productImageUrl;
+                    brandNameInput.value = brandName;
+                    productNameInput.value = 'Featured Product';
+                    logoUrlInput.value = `https://logo.clearbit.com/${domain}`;
+                    productImageUrlInput.value = 'https://placehold.co/540x500?text=Product+Image';
+                    brandColorInput.value = '#1F2937';
                     
-                    // Update color theme
-                    document.querySelector('.postcard .w-2/5').style.backgroundColor = simulatedResults.brandColor;
-                    
+                    updatePostcardDisplay();
+                    customizationForm.classList.remove('hidden');
+                    downloadBtn.disabled = false;
+                } finally {
                     // Hide generating state
                     generatingState.classList.add('hidden');
-                    
-                    // Show extracted info for customization
-                    extractedInfo.classList.remove('hidden');
-                    
-                    // Enable download button
-                    downloadBtn.disabled = false;
-                }, 2000);
+                }
             });
             
             // Update button click
             updateBtn.addEventListener('click', function() {
-                // Update postcard with customized values
-                brandNameDisplay.textContent = brandNameInput.value;
-                productNameDisplay.textContent = productNameInput.value;
-                
-                if (logoUrlInput.value) {
-                    brandLogo.src = logoUrlInput.value;
-                }
-                
-                if (productUrlInput.value) {
-                    productImage.src = productUrlInput.value;
-                }
-                
-                // Update color theme
-                document.querySelector('.postcard .w-2/5').style.backgroundColor = colorPicker.value;
+                updatePostcardDisplay();
             });
             
             // Download button click
@@ -384,124 +272,47 @@
                 });
             });
             
-            // Function to update template style based on category
-            function updateTemplateStyle(template) {
-                const postcardLeft = document.querySelector('.postcard .w-2/5');
+            // Update postcard display with current form values
+            function updatePostcardDisplay() {
+                brandNameDisplay.textContent = brandNameInput.value || 'BRAND NAME';
+                productNameDisplay.textContent = productNameInput.value || 'Product Name';
                 
-                // Reset styles
-                postcardLeft.style.backgroundColor = '#1F2937'; // Default dark gray
-                
-                // Apply template-specific styles
-                switch (template) {
-                    case 'home':
-                        postcardLeft.style.backgroundColor = '#1F2937'; // Dark gray
-                        break;
-                    case 'apparel':
-                        postcardLeft.style.backgroundColor = '#4B5563'; // Medium gray
-                        break;
-                    case 'beauty':
-                        postcardLeft.style.backgroundColor = '#9D174D'; // Pink
-                        break;
-                    case 'electronics':
-                        postcardLeft.style.backgroundColor = '#1E40AF'; // Blue
-                        break;
-                    case 'food':
-                        postcardLeft.style.backgroundColor = '#065F46'; // Green
-                        break;
-                    case 'baby':
-                        postcardLeft.style.backgroundColor = '#6D28D9'; // Purple
-                        break;
-                }
-            }
-            
-            // Function to simulate website extraction
-            function simulateExtraction(url, template) {
-                // Extract domain name from URL
-                let domain = url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-                let brandName = domain.split('.')[0].toUpperCase();
-                
-                // Generate a brand-appropriate color based on template
-                let brandColor;
-                switch (template) {
-                    case 'home':
-                        brandColor = '#1F2937'; // Dark gray
-                        break;
-                    case 'apparel':
-                        brandColor = '#4B5563'; // Medium gray
-                        break;
-                    case 'beauty':
-                        brandColor = '#9D174D'; // Pink
-                        break;
-                    case 'electronics':
-                        brandColor = '#1E40AF'; // Blue
-                        break;
-                    case 'food':
-                        brandColor = '#065F46'; // Green
-                        break;
-                    case 'baby':
-                        brandColor = '#6D28D9'; // Purple
-                        break;
-                    default:
-                        brandColor = '#1F2937'; // Default dark gray
+                if (logoUrlInput.value) {
+                    brandLogo.src = logoUrlInput.value;
+                    brandLogo.onerror = function() {
+                        this.src = 'https://placehold.co/200x80?text=Brand+Logo';
+                    };
                 }
                 
-                // Simulated extraction results
-                // In a real implementation, these would come from web scraping
-                return {
-                    brandName: brandName,
-                    productName: getProductNameByTemplate(template),
-                    logoUrl: getLogoPlaceholder(brandName),
-                    productImageUrl: getProductImageByTemplate(template),
-                    brandColor: brandColor
-                };
-            }
-            
-            // Function to get a placeholder logo
-            function getLogoPlaceholder(brandName) {
-                // In a real implementation, this would be extracted from the website
-                // For now, we'll generate a text-based logo placeholder
-                return `https://via.placeholder.com/200x100/ffffff/000000?text=${brandName}`;
-            }
-            
-            // Function to get product name by template
-            function getProductNameByTemplate(template) {
-                switch (template) {
-                    case 'home':
-                        return 'Modern Living Room Set';
-                    case 'apparel':
-                        return 'Premium Cotton T-Shirt';
-                    case 'beauty':
-                        return 'Hydrating Face Serum';
-                    case 'electronics':
-                        return 'Wireless Noise-Canceling Headphones';
-                    case 'food':
-                        return 'Organic Coffee Beans';
-                    case 'baby':
-                        return 'Adjustable Baby Carrier';
-                    default:
-                        return 'Featured Product';
+                if (productImageUrlInput.value) {
+                    productImage.src = productImageUrlInput.value;
+                    productImage.onerror = function() {
+                        this.src = 'https://placehold.co/540x500?text=Product+Image';
+                    };
                 }
+                
+                // Update color theme
+                postcardLeft.style.backgroundColor = brandColorInput.value;
             }
             
-            // Function to get product image by template
-            function getProductImageByTemplate(template) {
-                // In a real implementation, this would be extracted from the website
-                // For now, we'll use placeholder images based on the template
-                switch (template) {
-                    case 'home':
-                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Home+Decor+Image';
-                    case 'apparel':
-                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Apparel+Image';
-                    case 'beauty':
-                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Beauty+Product+Image';
-                    case 'electronics':
-                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Electronics+Image';
-                    case 'food':
-                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Food+Product+Image';
-                    case 'baby':
-                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Baby+Product+Image';
-                    default:
-                        return 'https://via.placeholder.com/540x500/e5e5e5/666666?text=Product+Image';
+            // Function to extract website data using the serverless function
+            async function extractWebsiteData(url) {
+                try {
+                    const response = await fetch('/.netlify/functions/scrape', {
+                        method: 'POST',
+                        body: JSON.stringify({ url }),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to scrape website');
+                    }
+                    
+                    const data = await response.json();
+                    return data;
+                } catch (error) {
+                    console.error('Error calling scrape function:', error);
+                    throw error;
                 }
             }
         });

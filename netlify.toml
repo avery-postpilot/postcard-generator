@@ -10,3 +10,7 @@
 [functions]
   node_bundler = "esbuild"
   external_node_modules = ["cheerio"]
+
+[dev]
+  functions = "netlify/functions"
+  functionsPort = 8888

@@ -10,3 +10,16 @@
     "cheerio": "^1.0.0-rc.12"
   }
 }
+{
+  "name": "postcard-generator",
+  "version": "1.0.0",
+  "description": "Postcard generator tool for PostPilot",
+  "scripts": {
+    "start": "netlify dev"
+  },
+  "dependencies": {
+    "axios": "^0.27.2",
+    "cheerio": "^1.0.0-rc.12",
+    "node-vibrant": "^3.2.2"
+  }
+}

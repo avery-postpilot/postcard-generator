@@ -58,16 +58,14 @@ exports.handler = async function (event, context) {
       brandName: "",
       brandDomain: "",
       logoUrl: "",
-      productName: "",
-      productPrice: "",
-      productImageUrl: "",
       brandColor: "#1F2937",
+      products: [],
     };
 
     // Domain for fallbacks
     const finalUrl = new URL(response.request.res.responseUrl);
     const domain = finalUrl.hostname.replace("www.", "");
-    results.brandDomain = domain; // Store domain for postcard display
+    results.brandDomain = domain;
 
     // Brand Name
     let brandName =
@@ -96,12 +94,12 @@ exports.handler = async function (event, context) {
       results.brandColor = themeColor;
     }
 
-    // Gather all possible logo images
+    // Gather possible logos
     const logoSelectors = [
       'img[class*="logo" i]',
       'img[id*="logo" i]',
       'img[alt*="logo" i]',
-      '.logo img',
+      ".logo img",
       'header img[src*="logo"]',
       'img[src*="logo" i]',
       'a[href="/"] img',
@@ -109,7 +107,7 @@ exports.handler = async function (event, context) {
     const potentialLogos = [];
 
     for (const selector of logoSelectors) {
-      $(selector).each((i, el) => {
+      $(selector).each((_, el) => {
         let logoSrc = $(el).attr("src") || $(el).attr("data-src");
         let altText = $(el).attr("alt") || "";
         if (logoSrc) {
@@ -126,9 +124,7 @@ exports.handler = async function (event, context) {
       });
     }
 
-    // Pick the best match
-    // 1. If src or alt includes brandName or domain, prioritize that
-    // 2. Otherwise, fallback to the first potential logo
+    // Pick best match (if any)
     let bestLogo = "";
     for (const logoObj of potentialLogos) {
       const srcLower = logoObj.src.toLowerCase();
@@ -147,11 +143,10 @@ exports.handler = async function (event, context) {
     if (!bestLogo && potentialLogos.length > 0) {
       bestLogo = potentialLogos[0].src;
     }
-
-    // If no logo found at all, fallback to Clearbit
     results.logoUrl = bestLogo || `https://logo.clearbit.com/${domain}`;
 
     // Extract product info
+    // We'll store all found products in an array
     const productSelectors = [
       ".product-card",
       ".product-item",
@@ -166,13 +161,12 @@ exports.handler = async function (event, context) {
       "article",
     ];
 
-    let foundProduct = false;
-    for (const selector of productSelectors) {
-      const products = $(selector);
-      if (products.length > 0) {
-        const product = products.first();
-
-        // Product name
+    const foundElements = $(productSelectors.join(","));
+    if (foundElements.length > 0) {
+      foundElements.each((_, productEl) => {
+        const product = $(productEl);
+        // Name
+        let productName = "";
         const productNameSelectors = [
           "h2",
           "h3",
@@ -182,21 +176,23 @@ exports.handler = async function (event, context) {
           '[class*="name"]',
           "h4",
         ];
-        for (const nameSel of productNameSelectors) {
-          const nameEl = product.find(nameSel).first();
+        for (const sel of productNameSelectors) {
+          const nameEl = product.find(sel).first();
           if (nameEl.length && nameEl.text().trim()) {
-            results.productName = nameEl.text().trim();
+            productName = nameEl.text().trim();
             break;
           }
         }
 
-        // Product price
+        // Price
+        let productPrice = "";
         const priceEl = product.find('[class*="price"]').first();
         if (priceEl.length && priceEl.text().trim()) {
-          results.productPrice = priceEl.text().trim();
+          productPrice = priceEl.text().trim();
         }
 
-        // Product image
+        // Image
+        let productImageUrl = "";
         const imgEl = product.find("img").first();
         if (imgEl.length) {
           let imgSrc = imgEl.attr("src") || imgEl.attr("data-src");
@@ -208,14 +204,22 @@ exports.handler = async function (event, context) {
             } else if (!imgSrc.startsWith("http")) {
               imgSrc = `${finalUrl.protocol}//${finalUrl.host}/${imgSrc}`;
             }
-            results.productImageUrl = imgSrc;
-            foundProduct = true;
+            productImageUrl = imgSrc;
           }
         }
-        break;
-      }
+
+        // Only push if there's at least a name or image
+        if (productName || productImageUrl) {
+          results.products.push({
+            productName,
+            productPrice,
+            productImageUrl,
+          });
+        }
+      });
     }
 
+    // If no products found at all, results.products stays empty
     return {
       statusCode: 200,
       headers,

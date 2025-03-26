@@ -1,6 +1,6 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
-const { Vibrant } = require("node-vibrant/node"); // Named import for node-vibrant@4+
+const { Vibrant } = require("node-vibrant/node");
 
 exports.handler = async function (event, context) {
   const headers = {
@@ -45,18 +45,20 @@ exports.handler = async function (event, context) {
     const html = response.data;
     const $ = cheerio.load(html);
 
-    // Initialize results
+    // Domain fallback
     const finalUrl = new URL(response.request.res.responseUrl);
     const domain = finalUrl.hostname.replace("www.", "");
+
+    // Initialize results
     const results = {
       brandName: "",
       brandDomain: domain,
       logoUrl: "",
-      brandColor: "#1F2937", // fallback if we can't get anything else
+      brandColor: "#1F2937", // fallback
       products: [],
     };
 
-    // 1) BRAND NAME
+    // (1) Brand Name
     let brandName =
       $('meta[property="og:site_name"]').attr("content") ||
       $('meta[name="application-name"]').attr("content") ||
@@ -77,7 +79,7 @@ exports.handler = async function (event, context) {
       .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
     results.brandName = brandName;
 
-    // 2) LOGO DETECTION
+    // (2) Logo
     const logoSelectors = [
       'img[class*="logo" i]',
       'img[id*="logo" i]',
@@ -104,6 +106,7 @@ exports.handler = async function (event, context) {
         }
       });
     }
+
     let bestLogo = "";
     for (const logoObj of potentialLogos) {
       const srcLower = logoObj.src.toLowerCase();
@@ -124,9 +127,7 @@ exports.handler = async function (event, context) {
     }
     results.logoUrl = bestLogo || `https://logo.clearbit.com/${domain}`;
 
-    // 3) COLOR FROM LOGO (DarkVibrant)
-    // We'll ignore <meta name="theme-color"> and just try to pick a dark color from the logo.
-    // This ensures better text contrast.
+    // (3) Brand Color from Logo (trying multiple swatches)
     try {
       const logoResp = await axios.get(results.logoUrl, {
         responseType: "arraybuffer",
@@ -135,23 +136,29 @@ exports.handler = async function (event, context) {
       const logoBuffer = Buffer.from(logoResp.data, "binary");
 
       const palette = await Vibrant.from(logoBuffer).getPalette();
-      // Attempt DarkVibrant first, else Vibrant, else Muted, etc.
-      const chosenSwatch =
-        palette.DarkVibrant ||
-        palette.DarkMuted ||
-        palette.Vibrant ||
-        palette.Muted ||
-        palette.LightVibrant;
 
-      if (chosenSwatch) {
-        results.brandColor = lightenIfTooDark(rgbToHex(chosenSwatch.getRgb()));
+      // We'll cycle through potential swatches in a preferred order
+      const swatchOrder = [
+        palette.DarkVibrant,
+        palette.DarkMuted,
+        palette.Vibrant,
+        palette.Muted,
+        palette.LightVibrant,
+      ];
+      for (const sw of swatchOrder) {
+        if (sw) {
+          const candidate = rgbToHex(sw.getRgb());
+          const finalColor = lightenIfTooDark(candidate);
+          results.brandColor = finalColor;
+          break;
+        }
       }
     } catch (err) {
       console.warn("Color extraction from logo failed:", err.message);
-      // fallback is still #1F2937
+      // fallback stays #1F2937
     }
 
-    // 4) PRODUCTS
+    // (4) Products
     const productSelectors = [
       ".product-card",
       ".product-item",
@@ -170,7 +177,7 @@ exports.handler = async function (event, context) {
       foundElements.each((_, productEl) => {
         const product = $(productEl);
 
-        // product name
+        // name
         let productName = "";
         const nameSelectors = [
           "h2",
@@ -242,7 +249,6 @@ exports.handler = async function (event, context) {
    Helper Functions
 ---------------------------- */
 
-// Convert [r, g, b] to "#rrggbb"
 function rgbToHex([r, g, b]) {
   const toHex = (c) => {
     const h = Math.round(c).toString(16).padStart(2, "0");
@@ -251,9 +257,9 @@ function rgbToHex([r, g, b]) {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// If color is extremely dark, lighten it ~30%
+// If color is extremely dark, lighten ~30%
 function lightenIfTooDark(hex) {
-  const threshold = 40; // if average < 40, lighten
+  const threshold = 40; // if average < 40 => lighten
   const noHash = hex.replace("#", "");
   let r = parseInt(noHash.substr(0, 2), 16);
   let g = parseInt(noHash.substr(2, 2), 16);

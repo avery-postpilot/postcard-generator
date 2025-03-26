@@ -1,16 +1,14 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
-const { Vibrant } = require("node-vibrant/node"); // <-- named import from "node" subpath
+const { Vibrant } = require("node-vibrant/node"); // Named import for node-vibrant@4+
 
 exports.handler = async function (event, context) {
-  // CORS headers
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 
-  // Handle preflight
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -20,8 +18,7 @@ exports.handler = async function (event, context) {
   }
 
   try {
-    // Parse request body
-    const { url } = JSON.parse(event.body);
+    const { url } = JSON.parse(event.body) || {};
     if (!url) {
       return {
         statusCode: 400,
@@ -30,22 +27,16 @@ exports.handler = async function (event, context) {
       };
     }
 
-    console.log(`Scraping URL: ${url}`);
-
-    // Ensure protocol
     let fullUrl = url.trim();
     if (!fullUrl.startsWith("http://") && !fullUrl.startsWith("https://")) {
       fullUrl = `https://${fullUrl}`;
     }
 
-    // Fetch site HTML
+    // Fetch HTML
     const response = await axios.get(fullUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        Referer: "https://www.google.com/",
       },
       timeout: 10000,
       maxRedirects: 5,
@@ -55,20 +46,17 @@ exports.handler = async function (event, context) {
     const $ = cheerio.load(html);
 
     // Initialize results
+    const finalUrl = new URL(response.request.res.responseUrl);
+    const domain = finalUrl.hostname.replace("www.", "");
     const results = {
       brandName: "",
-      brandDomain: "",
+      brandDomain: domain,
       logoUrl: "",
-      brandColor: "#1F2937", // fallback
+      brandColor: "#1F2937", // fallback if we can't get anything else
       products: [],
     };
 
-    // Domain for fallbacks
-    const finalUrl = new URL(response.request.res.responseUrl);
-    const domain = finalUrl.hostname.replace("www.", "");
-    results.brandDomain = domain;
-
-    // Brand Name
+    // 1) BRAND NAME
     let brandName =
       $('meta[property="og:site_name"]').attr("content") ||
       $('meta[name="application-name"]').attr("content") ||
@@ -89,13 +77,7 @@ exports.handler = async function (event, context) {
       .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
     results.brandName = brandName;
 
-    // Attempt brand color from <meta name="theme-color">
-    const themeColor = $('meta[name="theme-color"]').attr("content");
-    if (themeColor && isValidHex(themeColor)) {
-      results.brandColor = themeColor;
-    }
-
-    // Gather possible logos
+    // 2) LOGO DETECTION
     const logoSelectors = [
       'img[class*="logo" i]',
       'img[id*="logo" i]',
@@ -106,13 +88,11 @@ exports.handler = async function (event, context) {
       'a[href="/"] img',
     ];
     const potentialLogos = [];
-
     for (const selector of logoSelectors) {
       $(selector).each((_, el) => {
         let logoSrc = $(el).attr("src") || $(el).attr("data-src");
         let altText = $(el).attr("alt") || "";
         if (logoSrc) {
-          // Convert relative URLs
           if (logoSrc.startsWith("//")) {
             logoSrc = `${finalUrl.protocol}${logoSrc}`;
           } else if (logoSrc.startsWith("/")) {
@@ -124,8 +104,6 @@ exports.handler = async function (event, context) {
         }
       });
     }
-
-    // Pick best logo
     let bestLogo = "";
     for (const logoObj of potentialLogos) {
       const srcLower = logoObj.src.toLowerCase();
@@ -146,33 +124,34 @@ exports.handler = async function (event, context) {
     }
     results.logoUrl = bestLogo || `https://logo.clearbit.com/${domain}`;
 
-    // If brandColor is still fallback, try extracting from the logo
-    if (results.brandColor === "#1F2937" && results.logoUrl) {
-      try {
-        // Fetch the logo image as a buffer
-        const logoResp = await axios.get(results.logoUrl, {
-          responseType: "arraybuffer",
-          timeout: 10000,
-        });
-        const logoBuffer = Buffer.from(logoResp.data, "binary");
+    // 3) COLOR FROM LOGO (DarkVibrant)
+    // We'll ignore <meta name="theme-color"> and just try to pick a dark color from the logo.
+    // This ensures better text contrast.
+    try {
+      const logoResp = await axios.get(results.logoUrl, {
+        responseType: "arraybuffer",
+        timeout: 10000,
+      });
+      const logoBuffer = Buffer.from(logoResp.data, "binary");
 
-        // Use Vibrant to get a prominent color
-        const palette = await Vibrant.from(logoBuffer).getPalette();
-        // Vibrant, Muted, DarkVibrant, etc. - pick Vibrant if available
-        let swatch = palette.Vibrant || palette.Muted || palette.DarkVibrant;
-        if (swatch) {
-          const extractedColor = rgbToHex(swatch.getRgb());
-          results.brandColor = lightenIfTooDark(extractedColor);
-        }
-      } catch (err) {
-        console.warn("Logo color extraction failed:", err.message);
+      const palette = await Vibrant.from(logoBuffer).getPalette();
+      // Attempt DarkVibrant first, else Vibrant, else Muted, etc.
+      const chosenSwatch =
+        palette.DarkVibrant ||
+        palette.DarkMuted ||
+        palette.Vibrant ||
+        palette.Muted ||
+        palette.LightVibrant;
+
+      if (chosenSwatch) {
+        results.brandColor = lightenIfTooDark(rgbToHex(chosenSwatch.getRgb()));
       }
-    } else {
-      // If we do have a themeColor, ensure it's not too dark
-      results.brandColor = lightenIfTooDark(results.brandColor);
+    } catch (err) {
+      console.warn("Color extraction from logo failed:", err.message);
+      // fallback is still #1F2937
     }
 
-    // Extract products (collect them all)
+    // 4) PRODUCTS
     const productSelectors = [
       ".product-card",
       ".product-item",
@@ -191,9 +170,9 @@ exports.handler = async function (event, context) {
       foundElements.each((_, productEl) => {
         const product = $(productEl);
 
-        // Product name
+        // product name
         let productName = "";
-        const productNameSelectors = [
+        const nameSelectors = [
           "h2",
           "h3",
           ".product-title",
@@ -202,7 +181,7 @@ exports.handler = async function (event, context) {
           '[class*="name"]',
           "h4",
         ];
-        for (const sel of productNameSelectors) {
+        for (const sel of nameSelectors) {
           const nameEl = product.find(sel).first();
           if (nameEl.length && nameEl.text().trim()) {
             productName = nameEl.text().trim();
@@ -210,14 +189,14 @@ exports.handler = async function (event, context) {
           }
         }
 
-        // Price
+        // price
         let productPrice = "";
         const priceEl = product.find('[class*="price"]').first();
         if (priceEl.length && priceEl.text().trim()) {
           productPrice = priceEl.text().trim();
         }
 
-        // Image
+        // image
         let productImageUrl = "";
         const imgEl = product.find("img").first();
         if (imgEl.length) {
@@ -234,7 +213,6 @@ exports.handler = async function (event, context) {
           }
         }
 
-        // Only push if there's at least a name or image
         if (productName || productImageUrl) {
           results.products.push({
             productName,
@@ -263,11 +241,6 @@ exports.handler = async function (event, context) {
 /* ---------------------------
    Helper Functions
 ---------------------------- */
-// Basic check for valid 3 or 6-digit hex
-function isValidHex(str) {
-  const hexRegex = /^#?([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/;
-  return hexRegex.test(str.trim());
-}
 
 // Convert [r, g, b] to "#rrggbb"
 function rgbToHex([r, g, b]) {
@@ -278,9 +251,9 @@ function rgbToHex([r, g, b]) {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// If color is very dark, lighten it by ~30%
+// If color is extremely dark, lighten it ~30%
 function lightenIfTooDark(hex) {
-  const threshold = 40; // If average of RGB < 40 => lighten
+  const threshold = 40; // if average < 40, lighten
   const noHash = hex.replace("#", "");
   let r = parseInt(noHash.substr(0, 2), 16);
   let g = parseInt(noHash.substr(2, 2), 16);
@@ -288,7 +261,6 @@ function lightenIfTooDark(hex) {
 
   const avg = (r + g + b) / 3;
   if (avg < threshold) {
-    // lighten each channel by about 30%
     r = Math.min(255, Math.round(r * 1.3));
     g = Math.min(255, Math.round(g * 1.3));
     b = Math.min(255, Math.round(b * 1.3));

@@ -1,173 +1,212 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+const axios = require("axios");
+const cheerio = require("cheerio");
 
-exports.handler = async function(event, context) {
-  // Set CORS headers for browser clients
+exports.handler = async function (event, context) {
+  // CORS headers
   const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 
-  // Handle preflight OPTIONS request
-  if (event.httpMethod === 'OPTIONS') {
+  // Handle preflight
+  if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
       headers,
-      body: ''
+      body: "",
     };
   }
 
   try {
     // Parse request body
     const { url } = JSON.parse(event.body);
-
     if (!url) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: "URL is required" })
+        body: JSON.stringify({ error: "URL is required" }),
       };
     }
 
     console.log(`Scraping URL: ${url}`);
 
-    // Ensure URL has a protocol
-    let fullUrl = url;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      fullUrl = `https://${url}`;
+    // Ensure protocol
+    let fullUrl = url.trim();
+    if (!fullUrl.startsWith("http://") && !fullUrl.startsWith("https://")) {
+      fullUrl = `https://${fullUrl}`;
     }
 
-    // Fetch website content
+    // Fetch
     const response = await axios.get(fullUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Referer': 'https://www.google.com/'
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        Referer: "https://www.google.com/",
       },
       timeout: 10000,
-      maxRedirects: 5
+      maxRedirects: 5,
     });
 
     const html = response.data;
     const $ = cheerio.load(html);
 
-    // Initialize results object
+    // Initialize results
     const results = {
-      brandName: '',
-      logoUrl: '',
-      productName: '',
-      productPrice: '',
-      productImageUrl: '',
-      brandColor: '#1F2937'
+      brandName: "",
+      brandDomain: "",
+      logoUrl: "",
+      productName: "",
+      productPrice: "",
+      productImageUrl: "",
+      brandColor: "#1F2937",
     };
 
-    // Extract domain for fallbacks
-    const domain = new URL(response.request.res.responseUrl).hostname.replace('www.', '');
+    // Domain for fallbacks
+    const finalUrl = new URL(response.request.res.responseUrl);
+    const domain = finalUrl.hostname.replace("www.", "");
+    results.brandDomain = domain; // Store domain for postcard display
 
-    // Extract Brand Name
-    results.brandName = $('meta[property="og:site_name"]').attr('content') ||
-                        $('meta[name="application-name"]').attr('content') ||
-                        $('meta[name="twitter:site"]').attr('content');
-    if (!results.brandName) {
-      const title = $('title').text().trim();
+    // Brand Name
+    let brandName =
+      $('meta[property="og:site_name"]').attr("content") ||
+      $('meta[name="application-name"]').attr("content") ||
+      $('meta[name="twitter:site"]').attr("content") ||
+      "";
+    if (!brandName) {
+      const title = $("title").text().trim();
       if (title) {
-        results.brandName = title.split(/\s+[|\-–—]\s+/)[0].trim();
+        brandName = title.split(/\s+[|\-–—]\s+/)[0].trim();
       }
     }
-    if (!results.brandName) {
-      results.brandName = domain.split('.')[0];
+    if (!brandName) {
+      brandName = domain.split(".")[0];
     }
-    results.brandName = results.brandName
-      .replace(/@/g, '')
-      .replace(/^\./, '')
-      .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+    brandName = brandName
+      .replace(/@/g, "")
+      .replace(/^\./, "")
+      .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+    results.brandName = brandName;
 
-    // Attempt to extract brand color from meta tag
-    results.brandColor = $('meta[name="theme-color"]').attr('content') || results.brandColor;
+    // Brand color from meta
+    const themeColor = $('meta[name="theme-color"]').attr("content");
+    if (themeColor) {
+      results.brandColor = themeColor;
+    }
 
-    // Extract Logo
+    // Gather all possible logo images
     const logoSelectors = [
-      'header img[src*="logo"]',
-      '.logo img',
-      'img.logo',
-      'img[alt*="logo" i]',
-      'a[href="/"] img',
-      'img[src*="logo" i]',
+      'img[class*="logo" i]',
       'img[id*="logo" i]',
-      'img[class*="logo" i]'
+      'img[alt*="logo" i]',
+      '.logo img',
+      'header img[src*="logo"]',
+      'img[src*="logo" i]',
+      'a[href="/"] img',
     ];
+    const potentialLogos = [];
+
     for (const selector of logoSelectors) {
-      const logo = $(selector).first();
-      if (logo.length) {
-        let logoSrc = logo.attr('src') || logo.attr('data-src');
+      $(selector).each((i, el) => {
+        let logoSrc = $(el).attr("src") || $(el).attr("data-src");
+        let altText = $(el).attr("alt") || "";
         if (logoSrc) {
-          const baseUrl = new URL(response.request.res.responseUrl);
-          if (logoSrc.startsWith('//')) {
-            logoSrc = `${baseUrl.protocol}${logoSrc}`;
-          } else if (logoSrc.startsWith('/')) {
-            logoSrc = `${baseUrl.protocol}//${baseUrl.host}${logoSrc}`;
-          } else if (!logoSrc.startsWith('http')) {
-            logoSrc = `${baseUrl.protocol}//${baseUrl.host}/${logoSrc}`;
+          // Convert relative URLs
+          if (logoSrc.startsWith("//")) {
+            logoSrc = `${finalUrl.protocol}${logoSrc}`;
+          } else if (logoSrc.startsWith("/")) {
+            logoSrc = `${finalUrl.protocol}//${finalUrl.host}${logoSrc}`;
+          } else if (!logoSrc.startsWith("http")) {
+            logoSrc = `${finalUrl.protocol}//${finalUrl.host}/${logoSrc}`;
           }
-          results.logoUrl = logoSrc;
-          break;
+          potentialLogos.push({ src: logoSrc, alt: altText });
         }
-      }
-    }
-    if (!results.logoUrl) {
-      results.logoUrl = `https://logo.clearbit.com/${domain}`;
+      });
     }
 
-    // Extract Product Information
+    // Pick the best match
+    // 1. If src or alt includes brandName or domain, prioritize that
+    // 2. Otherwise, fallback to the first potential logo
+    let bestLogo = "";
+    for (const logoObj of potentialLogos) {
+      const srcLower = logoObj.src.toLowerCase();
+      const altLower = logoObj.alt.toLowerCase();
+      const brandLower = brandName.toLowerCase();
+      if (
+        srcLower.includes(brandLower) ||
+        srcLower.includes(domain) ||
+        altLower.includes(brandLower) ||
+        altLower.includes(domain)
+      ) {
+        bestLogo = logoObj.src;
+        break;
+      }
+    }
+    if (!bestLogo && potentialLogos.length > 0) {
+      bestLogo = potentialLogos[0].src;
+    }
+
+    // If no logo found at all, fallback to Clearbit
+    results.logoUrl = bestLogo || `https://logo.clearbit.com/${domain}`;
+
+    // Extract product info
     const productSelectors = [
-      '.product-card', 
-      '.product-item',
-      '.bestseller',
-      '.featured-product',
+      ".product-card",
+      ".product-item",
+      ".bestseller",
+      ".featured-product",
       '[class*="product"]',
       '[class*="Product"]',
       '[id*="product"]',
       '[id*="Product"]',
-      '.item',
-      '.product',
-      'article'
+      ".item",
+      ".product",
+      "article",
     ];
+
     let foundProduct = false;
     for (const selector of productSelectors) {
       const products = $(selector);
       if (products.length > 0) {
         const product = products.first();
-        // Extract product name
+
+        // Product name
         const productNameSelectors = [
-          'h2', 'h3', '.product-title', '.product-name',
-          '[class*="title"]', '[class*="name"]', 'h4'
+          "h2",
+          "h3",
+          ".product-title",
+          ".product-name",
+          '[class*="title"]',
+          '[class*="name"]',
+          "h4",
         ];
-        for (const nameSelector of productNameSelectors) {
-          const nameElement = product.find(nameSelector).first();
-          if (nameElement.length && nameElement.text().trim()) {
-            results.productName = nameElement.text().trim();
+        for (const nameSel of productNameSelectors) {
+          const nameEl = product.find(nameSel).first();
+          if (nameEl.length && nameEl.text().trim()) {
+            results.productName = nameEl.text().trim();
             break;
           }
         }
-        // Extract product price using selectors with "price"
-        const priceElement = product.find('[class*="price"]').first();
-        if (priceElement.length && priceElement.text().trim()) {
-          results.productPrice = priceElement.text().trim();
+
+        // Product price
+        const priceEl = product.find('[class*="price"]').first();
+        if (priceEl.length && priceEl.text().trim()) {
+          results.productPrice = priceEl.text().trim();
         }
-        // Extract product image
-        const imgElement = product.find('img').first();
-        if (imgElement.length) {
-          let imgSrc = imgElement.attr('src') || imgElement.attr('data-src');
+
+        // Product image
+        const imgEl = product.find("img").first();
+        if (imgEl.length) {
+          let imgSrc = imgEl.attr("src") || imgEl.attr("data-src");
           if (imgSrc) {
-            const baseUrl = new URL(response.request.res.responseUrl);
-            if (imgSrc.startsWith('//')) {
-              imgSrc = `${baseUrl.protocol}${imgSrc}`;
-            } else if (imgSrc.startsWith('/')) {
-              imgSrc = `${baseUrl.protocol}//${baseUrl.host}${imgSrc}`;
-            } else if (!imgSrc.startsWith('http')) {
-              imgSrc = `${baseUrl.protocol}//${baseUrl.host}/${imgSrc}`;
+            if (imgSrc.startsWith("//")) {
+              imgSrc = `${finalUrl.protocol}${imgSrc}`;
+            } else if (imgSrc.startsWith("/")) {
+              imgSrc = `${finalUrl.protocol}//${finalUrl.host}${imgSrc}`;
+            } else if (!imgSrc.startsWith("http")) {
+              imgSrc = `${finalUrl.protocol}//${finalUrl.host}/${imgSrc}`;
             }
             results.productImageUrl = imgSrc;
             foundProduct = true;
@@ -177,19 +216,17 @@ exports.handler = async function(event, context) {
       }
     }
 
-    // Return scraped results
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(results)
+      body: JSON.stringify(results),
     };
-
   } catch (error) {
     console.error("Error during scraping:", error);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({ error: error.message }),
     };
   }
 };

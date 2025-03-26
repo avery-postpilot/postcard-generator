@@ -2,13 +2,14 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const { Vibrant } = require("node-vibrant/node");
 
-exports.handler = async function (event, context) {
+exports.handler = async function(event, context) {
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 
+  // Handle preflight
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -18,6 +19,7 @@ exports.handler = async function (event, context) {
   }
 
   try {
+    // 1) Parse request
     const { url } = JSON.parse(event.body) || {};
     if (!url) {
       return {
@@ -26,13 +28,12 @@ exports.handler = async function (event, context) {
         body: JSON.stringify({ error: "URL is required" }),
       };
     }
-
     let fullUrl = url.trim();
     if (!fullUrl.startsWith("http://") && !fullUrl.startsWith("https://")) {
       fullUrl = `https://${fullUrl}`;
     }
 
-    // Fetch HTML
+    // 2) Fetch page
     const response = await axios.get(fullUrl, {
       headers: {
         "User-Agent":
@@ -41,24 +42,25 @@ exports.handler = async function (event, context) {
       timeout: 10000,
       maxRedirects: 5,
     });
-
     const html = response.data;
     const $ = cheerio.load(html);
 
-    // Domain fallback
+    // 3) Initialize results
     const finalUrl = new URL(response.request.res.responseUrl);
     const domain = finalUrl.hostname.replace("www.", "");
-
-    // Initialize results
     const results = {
       brandName: "",
       brandDomain: domain,
       logoUrl: "",
       brandColor: "#1F2937", // fallback
+      // We can store single‐product fields AND multi‐product array. The front end can decide which to use.
+      productName: "",
+      productPrice: "",
+      productImageUrl: "",
       products: [],
     };
 
-    // (1) Brand Name
+    // 4) Brand Name
     let brandName =
       $('meta[property="og:site_name"]').attr("content") ||
       $('meta[name="application-name"]').attr("content") ||
@@ -79,162 +81,50 @@ exports.handler = async function (event, context) {
       .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
     results.brandName = brandName;
 
-    // (2) Logo
-    const logoSelectors = [
-      'img[class*="logo" i]',
-      'img[id*="logo" i]',
-      'img[alt*="logo" i]',
-      ".logo img",
-      'header img[src*="logo"]',
-      'img[src*="logo" i]',
-      'a[href="/"] img',
-    ];
-    const potentialLogos = [];
-    for (const selector of logoSelectors) {
-      $(selector).each((_, el) => {
-        let logoSrc = $(el).attr("src") || $(el).attr("data-src");
-        let altText = $(el).attr("alt") || "";
-        if (logoSrc) {
-          if (logoSrc.startsWith("//")) {
-            logoSrc = `${finalUrl.protocol}${logoSrc}`;
-          } else if (logoSrc.startsWith("/")) {
-            logoSrc = `${finalUrl.protocol}//${finalUrl.host}${logoSrc}`;
-          } else if (!logoSrc.startsWith("http")) {
-            logoSrc = `${finalUrl.protocol}//${finalUrl.host}/${logoSrc}`;
-          }
-          potentialLogos.push({ src: logoSrc, alt: altText });
-        }
-      });
-    }
+    // 5) Logo
+    results.logoUrl = await findBestLogo($, finalUrl, brandName, domain);
 
-    let bestLogo = "";
-    for (const logoObj of potentialLogos) {
-      const srcLower = logoObj.src.toLowerCase();
-      const altLower = logoObj.alt.toLowerCase();
-      const brandLower = brandName.toLowerCase();
-      if (
-        srcLower.includes(brandLower) ||
-        srcLower.includes(domain) ||
-        altLower.includes(brandLower) ||
-        altLower.includes(domain)
-      ) {
-        bestLogo = logoObj.src;
-        break;
-      }
-    }
-    if (!bestLogo && potentialLogos.length > 0) {
-      bestLogo = potentialLogos[0].src;
-    }
-    results.logoUrl = bestLogo || `https://logo.clearbit.com/${domain}`;
-
-    // (3) Brand Color from Logo (trying multiple swatches)
+    // 6) Extract brand color from logo using Vibrant
     try {
-      const logoResp = await axios.get(results.logoUrl, {
-        responseType: "arraybuffer",
-        timeout: 10000,
-      });
-      const logoBuffer = Buffer.from(logoResp.data, "binary");
-
-      const palette = await Vibrant.from(logoBuffer).getPalette();
-
-      // We'll cycle through potential swatches in a preferred order
-      const swatchOrder = [
-        palette.DarkVibrant,
-        palette.DarkMuted,
-        palette.Vibrant,
-        palette.Muted,
-        palette.LightVibrant,
-      ];
-      for (const sw of swatchOrder) {
-        if (sw) {
-          const candidate = rgbToHex(sw.getRgb());
-          const finalColor = lightenIfTooDark(candidate);
-          results.brandColor = finalColor;
-          break;
+      if (results.logoUrl) {
+        const colorFromLogo = await getColorFromLogo(results.logoUrl);
+        if (colorFromLogo) {
+          results.brandColor = colorFromLogo;
         }
       }
     } catch (err) {
-      console.warn("Color extraction from logo failed:", err.message);
-      // fallback stays #1F2937
+      console.warn("Color extraction failed:", err.message);
     }
 
-    // (4) Products
-    const productSelectors = [
-      ".product-card",
-      ".product-item",
-      ".bestseller",
-      ".featured-product",
-      '[class*="product"]',
-      '[class*="Product"]',
-      '[id*="product"]',
-      '[id*="Product"]',
-      ".item",
-      ".product",
-      "article",
-    ];
-    const foundElements = $(productSelectors.join(","));
-    if (foundElements.length > 0) {
-      foundElements.each((_, productEl) => {
-        const product = $(productEl);
+    // 7) Attempt Single‐Product extraction
+    const singleProduct = extractSingleProduct($, finalUrl);
+    if (singleProduct && (singleProduct.productName || singleProduct.productImageUrl)) {
+      // If we found a valid single product, store it and return
+      results.productName = singleProduct.productName;
+      results.productPrice = singleProduct.productPrice;
+      results.productImageUrl = singleProduct.productImageUrl;
 
-        // name
-        let productName = "";
-        const nameSelectors = [
-          "h2",
-          "h3",
-          ".product-title",
-          ".product-name",
-          '[class*="title"]',
-          '[class*="name"]',
-          "h4",
-        ];
-        for (const sel of nameSelectors) {
-          const nameEl = product.find(sel).first();
-          if (nameEl.length && nameEl.text().trim()) {
-            productName = nameEl.text().trim();
-            break;
-          }
-        }
-
-        // price
-        let productPrice = "";
-        const priceEl = product.find('[class*="price"]').first();
-        if (priceEl.length && priceEl.text().trim()) {
-          productPrice = priceEl.text().trim();
-        }
-
-        // image
-        let productImageUrl = "";
-        const imgEl = product.find("img").first();
-        if (imgEl.length) {
-          let imgSrc = imgEl.attr("src") || imgEl.attr("data-src");
-          if (imgSrc) {
-            if (imgSrc.startsWith("//")) {
-              imgSrc = `${finalUrl.protocol}${imgSrc}`;
-            } else if (imgSrc.startsWith("/")) {
-              imgSrc = `${finalUrl.protocol}//${finalUrl.host}${imgSrc}`;
-            } else if (!imgSrc.startsWith("http")) {
-              imgSrc = `${finalUrl.protocol}//${finalUrl.host}/${imgSrc}`;
-            }
-            productImageUrl = imgSrc;
-          }
-        }
-
-        if (productName || productImageUrl) {
-          results.products.push({
-            productName,
-            productPrice,
-            productImageUrl,
-          });
-        }
-      });
+      // Return single product
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(results),
+      };
     }
 
+    // 8) If single‐product not found, fallback to multi‐product
+    const multiProducts = extractMultiProducts($, finalUrl);
+    if (multiProducts.length > 0) {
+      results.products = multiProducts;
+    }
+
+    // Return combined results
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify(results),
     };
+
   } catch (error) {
     console.error("Error during scraping:", error);
     return {
@@ -245,31 +135,176 @@ exports.handler = async function (event, context) {
   }
 };
 
-/* ---------------------------
+/* ------------------------------------------------------------
    Helper Functions
----------------------------- */
+------------------------------------------------------------- */
 
-function rgbToHex([r, g, b]) {
-  const toHex = (c) => {
-    const h = Math.round(c).toString(16).padStart(2, "0");
-    return h.length === 1 ? "0" + h : h;
-  };
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+function extractSingleProduct($, finalUrl) {
+  // Look for typical single‐product page selectors
+  // e.g. h1.product-title, .price, main product image
+  let productName =
+    $('h1.product-title').text().trim() ||
+    $('meta[property="og:title"]').attr("content") ||
+    "";
+  let productPrice =
+    $('.price, .product-price, [class*="price"]').first().text().trim() || "";
+
+  // For the main product image
+  let productImageUrl = "";
+  const mainImg = $('img#main-product-image, img.product__image').first();
+  if (mainImg.length) {
+    let imgSrc = mainImg.attr("src") || mainImg.attr("data-src");
+    if (imgSrc) {
+      imgSrc = fixRelativeUrl(imgSrc, finalUrl);
+      productImageUrl = imgSrc;
+    }
+  }
+  // fallback to OG image
+  if (!productImageUrl) {
+    const ogImg = $('meta[property="og:image"]').attr("content");
+    if (ogImg) productImageUrl = ogImg;
+  }
+
+  return { productName, productPrice, productImageUrl };
 }
 
-// If color is extremely dark, lighten ~30%
-function lightenIfTooDark(hex) {
-  const threshold = 40; // if average < 40 => lighten
-  const noHash = hex.replace("#", "");
-  let r = parseInt(noHash.substr(0, 2), 16);
-  let g = parseInt(noHash.substr(2, 2), 16);
-  let b = parseInt(noHash.substr(4, 2), 16);
+function extractMultiProducts($, finalUrl) {
+  const products = [];
+  const productSelectors = [
+    ".product-card",
+    ".product-item",
+    ".bestseller",
+    ".featured-product",
+    '[class*="product"]',
+    '[class*="Product"]',
+    '[id*="product"]',
+    '[id*="Product"]',
+    ".item",
+    ".product",
+    "article",
+  ];
+  const foundElements = $(productSelectors.join(","));
+  if (foundElements.length > 0) {
+    foundElements.each((_, el) => {
+      const productEl = $(el);
+      let name = "";
+      const nameSelectors = [
+        "h2",
+        "h3",
+        ".product-title",
+        ".product-name",
+        '[class*="title"]',
+        '[class*="name"]',
+        "h4",
+      ];
+      for (const sel of nameSelectors) {
+        const nameEl = productEl.find(sel).first();
+        if (nameEl.length && nameEl.text().trim()) {
+          name = nameEl.text().trim();
+          break;
+        }
+      }
 
-  const avg = (r + g + b) / 3;
-  if (avg < threshold) {
-    r = Math.min(255, Math.round(r * 1.3));
-    g = Math.min(255, Math.round(g * 1.3));
-    b = Math.min(255, Math.round(b * 1.3));
+      let price = "";
+      const priceEl = productEl.find('[class*="price"]').first();
+      if (priceEl.length && priceEl.text().trim()) {
+        price = priceEl.text().trim();
+      }
+
+      let productImageUrl = "";
+      const imgEl = productEl.find("img").first();
+      if (imgEl.length) {
+        let imgSrc = imgEl.attr("src") || imgEl.attr("data-src");
+        if (imgSrc) {
+          imgSrc = fixRelativeUrl(imgSrc, finalUrl);
+          productImageUrl = imgSrc;
+        }
+      }
+      if (name || productImageUrl) {
+        products.push({
+          productName: name,
+          productPrice: price,
+          productImageUrl,
+        });
+      }
+    });
   }
-  return rgbToHex([r, g, b]);
+  return products;
+}
+
+// Convert relative URLs
+function fixRelativeUrl(url, baseUrl) {
+  if (url.startsWith("//")) {
+    return `${baseUrl.protocol}${url}`;
+  } else if (url.startsWith("/")) {
+    return `${baseUrl.protocol}//${baseUrl.host}${url}`;
+  } else if (!url.startsWith("http")) {
+    return `${baseUrl.protocol}//${baseUrl.host}/${url}`;
+  }
+  return url;
+}
+
+// Find best brand logo from known selectors
+async function findBestLogo($, finalUrl, brandName, domain) {
+  const logoSelectors = [
+    'img[class*="logo" i]',
+    'img[id*="logo" i]',
+    'img[alt*="logo" i]',
+    ".logo img",
+    'header img[src*="logo"]',
+    'img[src*="logo" i]',
+    'a[href="/"] img',
+  ];
+  const potentialLogos = [];
+  for (const sel of logoSelectors) {
+    $(sel).each((_, el) => {
+      let src = $(el).attr("src") || $(el).attr("data-src");
+      if (src) {
+        src = fixRelativeUrl(src, finalUrl);
+        potentialLogos.push(src);
+      }
+    });
+  }
+  // pick the first that references brandName or domain
+  let best = "";
+  const brandLower = brandName.toLowerCase();
+  for (const logoSrc of potentialLogos) {
+    const lower = logoSrc.toLowerCase();
+    if (lower.includes(brandLower) || lower.includes(domain)) {
+      best = logoSrc;
+      break;
+    }
+  }
+  if (!best && potentialLogos.length > 0) {
+    best = potentialLogos[0];
+  }
+  return best || `https://logo.clearbit.com/${domain}`;
+}
+
+// Use Vibrant to get a color from the logo
+async function getColorFromLogo(logoUrl) {
+  const axios = require("axios");
+  const { Vibrant } = require("node-vibrant/node");
+  const logoResp = await axios.get(logoUrl, { responseType: "arraybuffer" });
+  const logoBuffer = Buffer.from(logoResp.data, "binary");
+  const palette = await Vibrant.from(logoBuffer).getPalette();
+
+  const swatchOrder = [
+    palette.DarkVibrant,
+    palette.DarkMuted,
+    palette.Vibrant,
+    palette.Muted,
+    palette.LightVibrant,
+  ];
+  for (const sw of swatchOrder) {
+    if (sw) {
+      return rgbToHex(sw.getRgb());
+    }
+  }
+  return null;
+}
+
+function rgbToHex([r, g, b]) {
+  const toHex = (c) => c.toString(16).padStart(2, "0");
+  return `#${toHex(Math.round(r))}${toHex(Math.round(g))}${toHex(Math.round(b))}`;
 }

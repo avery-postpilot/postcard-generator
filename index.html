@@ -37,9 +37,28 @@
       position: relative;
       z-index: 10;
     }
-    /* For text that might get long, allow scrolling in the left panel */
+    /* Let the left panel scroll if text is long */
     .left-panel {
-      overflow: auto; /* add scroll if content overflows */
+      overflow: auto;
+    }
+    /* 
+      Provide a small contrasting box behind the logo to ensure it's readable.
+      We'll color it dynamically in JS based on brand color brightness.
+    */
+    #logoWrapper {
+      display: none; /* only shown if there's a logo */
+      padding: 4px;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      max-width: 80%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #logo {
+      display: block;
+      width: auto;
+      height: 50px;
+      object-fit: contain;
     }
   </style>
 </head>
@@ -106,24 +125,18 @@
           <!-- Left side: brand color background -->
           <div
             id="postcard-left"
-            class="left-panel w-2/5 p-6 flex flex-col justify-center items-center text-center text-white"
+            class="left-panel w-2/5 p-6 flex flex-col justify-center items-center text-center"
             style="background-color: #1F2937"
           >
-            <!-- Brand Logo or fallback brand name -->
-            <div class="mb-4">
-              <img
-                id="logo"
-                src=""
-                alt="Brand Logo"
-                class="h-12 w-auto mx-auto"
-                style="display: none;"
-              />
-              <h2
-                id="brandName"
-                class="text-2xl font-bold"
-                style="display: none;"
-              ></h2>
+            <!-- Logo or brand name -->
+            <div id="logoWrapper">
+              <img id="logo" alt="Brand Logo" />
             </div>
+            <h2
+              id="brandName"
+              class="text-2xl font-bold mb-4"
+              style="display: none;"
+            ></h2>
 
             <!-- Greeting & Offer Text -->
             <div class="space-y-2 max-w-[90%]">
@@ -134,8 +147,7 @@
                 Use code:
                 <span
                   id="couponCode"
-                  class="inline-block px-2 py-1 font-bold"
-                  style="border: 2px solid #fff;"
+                  class="inline-block px-2 py-1 font-bold border-2"
                 >
                   DIRECTMAIL20
                 </span>
@@ -186,14 +198,11 @@
     let currentProductIndex = 0;
 
     document.addEventListener("DOMContentLoaded", () => {
-      console.log("DOMContentLoaded - event listeners ready.");
-
       const form = document.getElementById("postcardForm");
       const nextProductBtn = document.getElementById("nextProductBtn");
       const postcardNormal = document.getElementById("postcardNormal");
       const postcardFallback = document.getElementById("postcardFallback");
 
-      // SUBMIT: Scrape data
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const urlInput = document.getElementById("websiteUrl").value.trim();
@@ -216,18 +225,12 @@
           // Load products array
           allProducts = data.products || [];
           if (!Array.isArray(allProducts) || allProducts.length === 0) {
-            // No products => single fallback item
             allProducts = [
-              {
-                productName: "",
-                productPrice: "",
-                productImageUrl: "",
-              },
+              { productName: "", productPrice: "", productImageUrl: "" }
             ];
           }
           currentProductIndex = 0;
 
-          // Show "Try Another Product" only if multiple items
           nextProductBtn.style.display =
             allProducts.length > 1 ? "inline-block" : "none";
 
@@ -238,7 +241,6 @@
         }
       });
 
-      // NEXT PRODUCT: cycle through products
       nextProductBtn.addEventListener("click", () => {
         if (allProducts.length < 2) return;
         currentProductIndex = (currentProductIndex + 1) % allProducts.length;
@@ -246,7 +248,6 @@
         updatePostcard(brandData, allProducts[currentProductIndex]);
       });
 
-      // DOWNLOAD: capture postcard
       document.getElementById("downloadButton").addEventListener("click", () => {
         const target =
           postcardFallback.style.display === "none"
@@ -262,7 +263,6 @@
       });
     });
 
-    // Retrieve current brand data from the normal postcard panel
     function getCurrentBrandData() {
       return {
         brandName: document.getElementById("brandName").textContent,
@@ -272,7 +272,6 @@
       };
     }
 
-    // Call Netlify function
     async function extractWebsiteData(url) {
       const functionPath = "/.netlify/functions/scrape";
       const response = await fetch(functionPath, {
@@ -288,7 +287,6 @@
       return await response.json();
     }
 
-    // Update the postcard with brand & product data
     function updatePostcard(brandData, productData) {
       const hasBrandImage = !!brandData.logoUrl;
       const hasProductImage = !!productData.productImageUrl;
@@ -300,46 +298,52 @@
       }
     }
 
-    // Normal 2-panel design
     function showNormal(brandData, productData) {
-      // Hide fallback, show normal
       document.getElementById("postcardFallback").style.display = "none";
       const postcardNormal = document.getElementById("postcardNormal");
       postcardNormal.style.display = "flex";
 
-      // Background color
+      // Set background color
       const leftPanel = document.getElementById("postcard-left");
       leftPanel.style.backgroundColor = brandData.brandColor || "#1F2937";
 
-      // Dynamic coupon border color for contrast
-      const couponCode = document.getElementById("couponCode");
-      couponCode.style.borderColor = getContrastColor(brandData.brandColor);
+      // Decide if brandColor is "dark" or "light" for text color
+      const textColor = getContrastColor(brandData.brandColor);
+      leftPanel.style.color = textColor;
 
-      // Logo or brand name
+      // Adjust the coupon border to match text color for visibility
+      const couponCode = document.getElementById("couponCode");
+      couponCode.style.borderColor = textColor;
+
+      // LOGO
+      const logoWrapper = document.getElementById("logoWrapper");
       const logoEl = document.getElementById("logo");
       const brandNameEl = document.getElementById("brandName");
       if (brandData.logoUrl) {
+        logoWrapper.style.display = "block";
         logoEl.src = brandData.logoUrl;
-        logoEl.style.display = "block";
+
+        // Provide a background or border behind the logo in the OPPOSITE color
+        logoWrapper.style.backgroundColor = invertColor(brandData.brandColor);
         brandNameEl.style.display = "none";
       } else {
-        logoEl.style.display = "none";
+        logoWrapper.style.display = "none";
         brandNameEl.style.display = "block";
         brandNameEl.textContent = brandData.brandName;
       }
 
-      // Product name
+      // PRODUCT NAME
       document.getElementById("productName").textContent =
         productData.productName || "";
 
-      // Price: parse final $xx.xx
+      // PRICE: parse final $xx.xx
       const parsedPrice = parseFinalPrice(productData.productPrice || "");
       document.getElementById("productPrice").textContent = parsedPrice;
 
-      // Domain (no prefix)
+      // DOMAIN
       document.getElementById("brandURL").textContent = brandData.brandDomain;
 
-      // Product image
+      // PRODUCT IMAGE
       const productImgEl = document.getElementById("productImage");
       if (productData.productImageUrl) {
         productImgEl.src = productData.productImageUrl;
@@ -349,9 +353,7 @@
       }
     }
 
-    // Fallback if no images
     function showFallback(brandData) {
-      // Hide normal, show fallback
       document.getElementById("postcardNormal").style.display = "none";
       const fallback = document.getElementById("postcardFallback");
       fallback.style.display = "flex";
@@ -362,25 +364,20 @@
       const textColor = getContrastColor(brandData.brandColor || "#1F2937");
       fallbackPanel.style.color = textColor;
 
-      // Fallback brand name & domain
-      document.getElementById("fallbackBrandName").textContent =
-        brandData.brandName;
-      document.getElementById("fallbackBrandURL").textContent =
-        brandData.brandDomain;
+      document.getElementById("fallbackBrandName").textContent = brandData.brandName;
+      document.getElementById("fallbackBrandURL").textContent = brandData.brandDomain;
     }
 
-    // Return either the last "$xx.xx" or empty string
+    // Return either the last "$xx.xx" or empty
     function parseFinalPrice(fullPrice) {
-      // Example: "Regular price $46.99 Sale price $40.99" => "$40.99"
-      // Grab the last "$" and everything until the next space (or end).
       const matches = fullPrice.match(/\$[0-9.,]+/g);
       if (!matches || matches.length === 0) {
         return "";
       }
-      return matches[matches.length - 1]; // the last match
+      return matches[matches.length - 1];
     }
 
-    // Simple contrast check: returns "#000" or "#fff"
+    // Decide black or white text based on background
     function getContrastColor(bgHex) {
       const hex = bgHex.replace("#", "");
       const r = parseInt(hex.substr(0, 2), 16) || 0;
@@ -388,6 +385,14 @@
       const b = parseInt(hex.substr(4, 2), 16) || 0;
       const yiq = (r * 299 + g * 587 + b * 114) / 1000;
       return yiq >= 128 ? "#000" : "#fff";
+    }
+
+    // Invert color (simple approach)
+    // If brand color is dark => produce a light color for the logo background, and vice versa.
+    function invertColor(bgHex) {
+      // We'll just do a basic approach: if it's dark, return #fff; if it's light, return #000.
+      const textColor = getContrastColor(bgHex);
+      return textColor === "#000" ? "#fff" : "#000";
     }
   </script>
 </body>

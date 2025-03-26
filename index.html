@@ -24,11 +24,15 @@
     body {
       font-family: "Merriweather", serif;
     }
+    /*
+      Give more vertical space so text doesn't overflow.
+      We'll do a 9:6 ratio instead of 9:5.
+    */
     .postcard {
       position: relative;
       width: 100%;
       max-width: 900px;
-      aspect-ratio: 9 / 5; /* maintain shape */
+      aspect-ratio: 9 / 6;
       display: flex;
       overflow: hidden;
       border-radius: 0.5rem;
@@ -37,19 +41,18 @@
       position: relative;
       z-index: 10;
     }
-    /* Let the left panel scroll if text is long */
+    /* Let the left panel scroll if text is very long */
     .left-panel {
       overflow: auto;
     }
-    /* 
-      Provide a small contrasting box behind the logo to ensure it's readable.
-      We'll color it dynamically in JS based on brand color brightness.
-    */
+    /* Semi-transparent white behind the logo + drop-shadow for readability */
     #logoWrapper {
-      display: none; /* only shown if there's a logo */
+      display: none;
+      background-color: rgba(255, 255, 255, 0.6);
       padding: 4px;
       border-radius: 4px;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
+      box-shadow: 0 0 6px rgba(0,0,0,0.3);
       max-width: 80%;
       margin-left: auto;
       margin-right: auto;
@@ -60,6 +63,18 @@
       height: 50px;
       object-fit: contain;
     }
+    /* Slightly smaller text to reduce overflow issues */
+    #brandName {
+      font-size: 1.25rem; /* ~ text-xl */
+      margin-bottom: 0.75rem;
+      display: none;
+    }
+    .offer-text {
+      font-size: 0.9rem; /* smaller text */
+    }
+    .product-info {
+      font-size: 0.8rem;
+    }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -69,7 +84,6 @@
       <p class="text-center text-gray-600">Generate custom marketing postcards for email outreach</p>
     </header>
 
-    <!-- Two-column layout: left for form, right for postcard preview -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
       <!-- Left column: Settings -->
       <div class="bg-white p-6 rounded-lg shadow-md">
@@ -120,27 +134,23 @@
       <div>
         <h2 class="text-xl font-semibold mb-4">Preview</h2>
 
-        <!-- Normal postcard layout (2-panel) -->
+        <!-- Normal postcard layout -->
         <div id="postcardNormal" class="postcard shadow-lg bg-white">
           <!-- Left side: brand color background -->
           <div
             id="postcard-left"
-            class="left-panel w-2/5 p-6 flex flex-col justify-center items-center text-center"
+            class="left-panel w-2/5 p-4 flex flex-col justify-center items-center text-center"
             style="background-color: #1F2937"
           >
             <!-- Logo or brand name -->
             <div id="logoWrapper">
               <img id="logo" alt="Brand Logo" />
             </div>
-            <h2
-              id="brandName"
-              class="text-2xl font-bold mb-4"
-              style="display: none;"
-            ></h2>
+            <h2 id="brandName"></h2>
 
             <!-- Greeting & Offer Text -->
-            <div class="space-y-2 max-w-[90%]">
-              <p class="text-xl">Hello, Amanda!</p>
+            <div class="offer-text space-y-2 max-w-[90%]">
+              <p class="text-lg">Hello, Amanda!</p>
               <p>Shop Our Sale Today</p>
               <p>Get up to <strong>20% OFF</strong></p>
               <p>
@@ -155,10 +165,10 @@
             </div>
 
             <!-- Product info -->
-            <div class="mt-6 space-y-1 max-w-[90%]">
-              <h3 id="productName" class="text-lg font-semibold leading-tight"></h3>
-              <p id="productPrice" class="text-sm leading-tight"></p>
-              <p id="brandURL" class="text-sm leading-tight"></p>
+            <div class="product-info mt-4 space-y-1 max-w-[90%]">
+              <h3 id="productName" class="font-semibold leading-tight"></h3>
+              <p id="productPrice" class="leading-tight"></p>
+              <p id="brandURL" class="leading-tight"></p>
             </div>
           </div>
 
@@ -174,7 +184,7 @@
           </div>
         </div>
 
-        <!-- Fallback postcard (single-panel) if no images -->
+        <!-- Fallback postcard -->
         <div
           id="postcardFallback"
           class="postcard shadow-lg flex items-center justify-center"
@@ -225,9 +235,7 @@
           // Load products array
           allProducts = data.products || [];
           if (!Array.isArray(allProducts) || allProducts.length === 0) {
-            allProducts = [
-              { productName: "", productPrice: "", productImageUrl: "" }
-            ];
+            allProducts = [{ productName: "", productPrice: "", productImageUrl: "" }];
           }
           currentProductIndex = 0;
 
@@ -303,28 +311,25 @@
       const postcardNormal = document.getElementById("postcardNormal");
       postcardNormal.style.display = "flex";
 
-      // Set background color
+      // Background color
       const leftPanel = document.getElementById("postcard-left");
       leftPanel.style.backgroundColor = brandData.brandColor || "#1F2937";
 
-      // Decide if brandColor is "dark" or "light" for text color
+      // Decide text color (black/white) based on brandColor
       const textColor = getContrastColor(brandData.brandColor);
       leftPanel.style.color = textColor;
 
-      // Adjust the coupon border to match text color for visibility
+      // Adjust coupon border
       const couponCode = document.getElementById("couponCode");
       couponCode.style.borderColor = textColor;
 
-      // LOGO
+      // Logo vs brand name
       const logoWrapper = document.getElementById("logoWrapper");
       const logoEl = document.getElementById("logo");
       const brandNameEl = document.getElementById("brandName");
       if (brandData.logoUrl) {
         logoWrapper.style.display = "block";
         logoEl.src = brandData.logoUrl;
-
-        // Provide a background or border behind the logo in the OPPOSITE color
-        logoWrapper.style.backgroundColor = invertColor(brandData.brandColor);
         brandNameEl.style.display = "none";
       } else {
         logoWrapper.style.display = "none";
@@ -332,18 +337,18 @@
         brandNameEl.textContent = brandData.brandName;
       }
 
-      // PRODUCT NAME
+      // Product name
       document.getElementById("productName").textContent =
         productData.productName || "";
 
-      // PRICE: parse final $xx.xx
+      // Price: parse final $xx.xx
       const parsedPrice = parseFinalPrice(productData.productPrice || "");
       document.getElementById("productPrice").textContent = parsedPrice;
 
-      // DOMAIN
+      // Domain
       document.getElementById("brandURL").textContent = brandData.brandDomain;
 
-      // PRODUCT IMAGE
+      // Product image
       const productImgEl = document.getElementById("productImage");
       if (productData.productImageUrl) {
         productImgEl.src = productData.productImageUrl;
@@ -368,7 +373,7 @@
       document.getElementById("fallbackBrandURL").textContent = brandData.brandDomain;
     }
 
-    // Return either the last "$xx.xx" or empty
+    // Parse final "$xx.xx" from a string
     function parseFinalPrice(fullPrice) {
       const matches = fullPrice.match(/\$[0-9.,]+/g);
       if (!matches || matches.length === 0) {
@@ -377,7 +382,7 @@
       return matches[matches.length - 1];
     }
 
-    // Decide black or white text based on background
+    // Simple contrast check: returns "#000" or "#fff"
     function getContrastColor(bgHex) {
       const hex = bgHex.replace("#", "");
       const r = parseInt(hex.substr(0, 2), 16) || 0;
@@ -385,14 +390,6 @@
       const b = parseInt(hex.substr(4, 2), 16) || 0;
       const yiq = (r * 299 + g * 587 + b * 114) / 1000;
       return yiq >= 128 ? "#000" : "#fff";
-    }
-
-    // Invert color (simple approach)
-    // If brand color is dark => produce a light color for the logo background, and vice versa.
-    function invertColor(bgHex) {
-      // We'll just do a basic approach: if it's dark, return #fff; if it's light, return #000.
-      const textColor = getContrastColor(bgHex);
-      return textColor === "#000" ? "#fff" : "#000";
     }
   </script>
 </body>

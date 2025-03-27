@@ -143,8 +143,8 @@
             >
               Generate Postcard
             </button>
-            <!-- Always show these two buttons so user sees them, 
-                 even if there's only one product/color. -->
+            <!-- Always show these two buttons so user can see them.
+                 If there's only one product or one color, they'll do nothing. -->
             <button
               id="anotherProductBtn"
               type="button"
@@ -238,20 +238,22 @@
       const anotherColorBtn = document.getElementById("anotherColorBtn");
       const downloadBtn = document.getElementById("downloadButton");
 
-      // Initially, these buttons won't do much if there's only one product/color,
-      // but they're visible so the user sees them.
+      // "Try Another Product" cycles through allProducts (if >1).
       anotherProductBtn.addEventListener("click", () => {
         if (allProducts.length < 2) {
-          alert("Only one product found or none at all.");
+          // Only one product found, do nothing or show a small notice.
+          console.log("No additional products to cycle through.");
           return;
         }
         currentProductIndex = (currentProductIndex + 1) % allProducts.length;
         updatePostcard(null, currentProductIndex, currentColorIndex);
       });
 
+      // "Try Another Color" cycles through allColors (if >1).
       anotherColorBtn.addEventListener("click", () => {
         if (allColors.length < 2) {
-          alert("Only one color swatch found or none at all.");
+          // Only one color swatch found, do nothing or show a small notice.
+          console.log("No additional color swatches to cycle through.");
           return;
         }
         currentColorIndex = (currentColorIndex + 1) % allColors.length;
@@ -393,6 +395,7 @@
     function getContrastColor(hex) {
       hex = hex.replace("#", "");
       if (hex.length < 6) {
+        // if it's a 3-digit hex, expand it
         hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
       }
       const r = parseInt(hex.substr(0,2),16);

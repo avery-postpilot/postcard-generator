@@ -28,31 +28,31 @@
       position: relative;
       width: 100%;
       max-width: 900px;
-      aspect-ratio: 9 / 6; /* Slightly taller for spacing */
+      aspect-ratio: 9 / 6; /* Slightly taller ratio */
       display: flex;
       overflow: hidden;
       border-radius: 0.5rem;
       margin: auto;
       box-shadow: 0 0 10px rgba(0,0,0,0.2);
     }
-    /* 
-      We apply the scraped font only to elements inside .postcard 
-      to avoid changing the entire UI.
-    */
+    /* Apply the scraped font only within the postcard. */
     .postcard * {
       font-family: var(--postcard-font), "Merriweather", serif;
     }
+
     .left-panel {
       display: flex;
       flex-direction: column;
       width: 40%;
     }
+
     .logo-bar {
-      /* The top bar for the logo, with padding to avoid edges */
-      height: 60px;
+      /* The top bar for the logo, extra space so it's not too close to edges */
+      height: 80px;
       display: flex;
       align-items: center;
-      padding: 0.5rem 1rem; /* extra px for left/right space */
+      justify-content: center;
+      padding: 1rem;
       box-sizing: border-box;
     }
     #logo {
@@ -60,6 +60,7 @@
       width: auto;
       object-fit: contain;
     }
+
     .content-area {
       flex: 1;
       display: flex;
@@ -72,6 +73,7 @@
       overflow: auto;
       box-sizing: border-box;
     }
+
     .right-panel {
       width: 60%;
       position: relative;
@@ -84,6 +86,7 @@
       object-fit: cover;
       object-position: 50% 50%;
     }
+
     /* Discount box style */
     #discountBox {
       border: 2px solid currentColor;
@@ -91,6 +94,12 @@
       font-weight: bold;
       display: inline-block;
     }
+
+    /* Make product name smaller */
+    #productName {
+      font-size: 0.9rem;
+    }
+
     /* Fallback layout if no product data */
     #fallback {
       display: none;
@@ -134,17 +143,19 @@
             >
               Generate Postcard
             </button>
+            <!-- Always show these two buttons so user sees them, 
+                 even if there's only one product/color. -->
             <button
               id="anotherProductBtn"
               type="button"
-              class="hidden bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded"
+              class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded"
             >
               Try Another Product
             </button>
             <button
               id="anotherColorBtn"
               type="button"
-              class="hidden bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded"
+              class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded"
             >
               Try Another Color
             </button>
@@ -185,8 +196,8 @@
                 <span id="discountBox">Use code: DIRECTMAIL20</span>
               </div>
               <div class="mt-4">
-                <h3 id="productName" class="text-lg font-bold"></h3>
-                <p id="productPrice" class="text-md"></p>
+                <h3 id="productName" class="font-bold"></h3>
+                <p id="productPrice"></p>
               </div>
               <p id="brandURL" class="text-sm mt-6"></p>
             </div>
@@ -227,6 +238,26 @@
       const anotherColorBtn = document.getElementById("anotherColorBtn");
       const downloadBtn = document.getElementById("downloadButton");
 
+      // Initially, these buttons won't do much if there's only one product/color,
+      // but they're visible so the user sees them.
+      anotherProductBtn.addEventListener("click", () => {
+        if (allProducts.length < 2) {
+          alert("Only one product found or none at all.");
+          return;
+        }
+        currentProductIndex = (currentProductIndex + 1) % allProducts.length;
+        updatePostcard(null, currentProductIndex, currentColorIndex);
+      });
+
+      anotherColorBtn.addEventListener("click", () => {
+        if (allColors.length < 2) {
+          alert("Only one color swatch found or none at all.");
+          return;
+        }
+        currentColorIndex = (currentColorIndex + 1) % allColors.length;
+        updatePostcard(null, currentProductIndex, currentColorIndex);
+      });
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const url = document.getElementById("websiteUrl").value.trim();
@@ -243,28 +274,12 @@
           currentColorIndex = 0;
           primaryFont = data.primaryFont || "Merriweather";
 
-          // Show or hide "Try Another" buttons
-          anotherProductBtn.style.display = (allProducts.length > 1) ? "inline-block" : "none";
-          anotherColorBtn.style.display = (allColors.length > 1) ? "inline-block" : "none";
-
-          // Update the postcard with the "active" product and color
+          // Update postcard with the first product & color
           updatePostcard(data, 0, 0);
         } catch (err) {
           console.error(err);
           alert("Scraping failed. Check console for details.");
         }
-      });
-
-      anotherProductBtn.addEventListener("click", () => {
-        if (allProducts.length < 2) return;
-        currentProductIndex = (currentProductIndex + 1) % allProducts.length;
-        updatePostcard(null, currentProductIndex, currentColorIndex);
-      });
-
-      anotherColorBtn.addEventListener("click", () => {
-        if (allColors.length < 2) return;
-        currentColorIndex = (currentColorIndex + 1) % allColors.length;
-        updatePostcard(null, currentProductIndex, currentColorIndex);
       });
 
       downloadBtn.addEventListener("click", () => {

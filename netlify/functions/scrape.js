@@ -2,15 +2,19 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const { Vibrant } = require("node-vibrant/node");
 
-// Helper: Convert RGB array to hex string.
+/* ----------------------------------
+   Helper Functions
+---------------------------------- */
+
+// Convert [r, g, b] to "#rrggbb"
 function rgbToHex([r, g, b]) {
   const toHex = (c) => c.toString(16).padStart(2, "0");
   return `#${toHex(Math.round(r))}${toHex(Math.round(g))}${toHex(Math.round(b))}`;
 }
 
-// Helper: If color is extremely dark, lighten it.
+// If color is extremely dark, lighten ~30%
 function lightenIfTooDark(hex) {
-  const threshold = 40;
+  const threshold = 40; 
   const noHash = hex.replace("#", "");
   let r = parseInt(noHash.substr(0, 2), 16);
   let g = parseInt(noHash.substr(2, 2), 16);
@@ -24,7 +28,7 @@ function lightenIfTooDark(hex) {
   return rgbToHex([r, g, b]);
 }
 
-// Helper: Fix relative URLs.
+// Convert relative URLs => absolute
 function fixRelativeUrl(url, baseUrl) {
   if (url.startsWith("//")) {
     return `${baseUrl.protocol}${url}`;
@@ -36,40 +40,27 @@ function fixRelativeUrl(url, baseUrl) {
   return url;
 }
 
-// Helper: Extract primary font from inline styles and <style> blocks.
+// Extract primary font from inline styles and <style> blocks.
 function extractPrimaryFont(html) {
-  // Search for font-family: in inline styles
+  // Look for "font-family: something" 
   const fontRegex = /font-family:\s*([^;"}]+)/i;
   const match = html.match(fontRegex);
   if (match && match[1]) {
-    // Remove quotes and extra spaces.
     return match[1].replace(/["']/g, "").trim();
   }
   return null;
 }
 
-// Helper: Use Vibrant to extract a prominent color from an image URL.
-async function getColorFromImage(imgUrl) {
-  const imgResp = await axios.get(imgUrl, { responseType: "arraybuffer" });
-  const imgBuffer = Buffer.from(imgResp.data, "binary");
-  const palette = await Vibrant.from(imgBuffer).getPalette();
-  const swatchOrder = [
-    palette.DarkVibrant,
-    palette.DarkMuted,
-    palette.Vibrant,
-    palette.Muted,
-    palette.LightVibrant,
-  ];
-  for (const sw of swatchOrder) {
-    if (sw && typeof sw.getRgb === "function") {
-      const rawColor = rgbToHex(sw.getRgb());
-      return lightenIfTooDark(rawColor);
-    }
+// Parse final $xx.xx from "Regular price $46.99 Sale price $40.99" => "$40.99"
+function parseFinalPrice(fullPrice) {
+  const matches = fullPrice.match(/\$[0-9.,]+/g);
+  if (!matches || matches.length === 0) {
+    return "";
   }
-  return null;
+  return matches[matches.length - 1];
 }
 
-// Helper: Attempt to find the brand logo.
+// Attempt brand logo detection
 async function findBrandLogo($, finalUrl, brandName, domain) {
   const logoSelectors = [
     'img[class*="logo" i]',
@@ -104,12 +95,14 @@ async function findBrandLogo($, finalUrl, brandName, domain) {
   return best || `https://logo.clearbit.com/${domain}`;
 }
 
-// Helper: Extract single-product data.
+// Attempt single-product extraction
 function extractSingleProduct($, finalUrl) {
   const productName = $('h1.product-title').text().trim() ||
                       $('meta[property="og:title"]').attr("content") ||
                       "";
-  const productPrice = $('.price, .product-price, [class*="price"]').first().text().trim() || "";
+  const rawPrice = $('.price, .product-price, [class*="price"]').first().text().trim() || "";
+  const productPrice = parseFinalPrice(rawPrice);
+
   let productImageUrl = "";
   const mainImg = $('img#main-product-image, img.product__image').first();
   if (mainImg.length) {
@@ -124,10 +117,11 @@ function extractSingleProduct($, finalUrl) {
       productImageUrl = ogImg;
     }
   }
+
   return { productName, productPrice, productImageUrl };
 }
 
-// Helper: Extract multi-product data (if single product isn’t detected).
+// Attempt multi-product extraction
 function extractMultiProducts($, finalUrl) {
   const products = [];
   const productSelectors = [
@@ -146,7 +140,7 @@ function extractMultiProducts($, finalUrl) {
   $(productSelectors.join(",")).each((_, el) => {
     const productEl = $(el);
     let name = "";
-    const nameSelectors = ["h2", "h3", ".product-title", ".product-name", '[class*="title"]', '[class*="name"]', "h4"];
+    const nameSelectors = ["h2","h3",".product-title",".product-name",'[class*="title"]','[class*="name"]',"h4"];
     for (const sel of nameSelectors) {
       const nEl = productEl.find(sel).first();
       if (nEl && nEl.text().trim()) {
@@ -154,14 +148,12 @@ function extractMultiProducts($, finalUrl) {
         break;
       }
     }
-    let price = "";
-    const priceEl = productEl.find('[class*="price"]').first();
-    if (priceEl && priceEl.text().trim()) {
-      price = priceEl.text().trim();
-    }
+    const rawPrice = productEl.find('[class*="price"]').first().text().trim() || "";
+    const price = parseFinalPrice(rawPrice);
+
     let productImageUrl = "";
     const imgEl = productEl.find("img").first();
-    if (imgEl) {
+    if (imgEl && imgEl.length) {
       let imgSrc = imgEl.attr("src") || imgEl.attr("data-src");
       if (imgSrc) {
         productImageUrl = fixRelativeUrl(imgSrc, finalUrl);
@@ -172,129 +164,195 @@ function extractMultiProducts($, finalUrl) {
     }
   });
   return products;
-};
+}
+
+// Extract multiple color swatches from an image using Vibrant
+async function getColorSwatches(imgUrl) {
+  const axiosResp = await axios.get(imgUrl, { responseType: "arraybuffer" });
+  const buffer = Buffer.from(axiosResp.data, "binary");
+  const palette = await Vibrant.from(buffer).getPalette();
+
+  // We'll store each swatch in an array, ignoring nulls
+  const swatches = [];
+  const candidateSwatches = [
+    palette.DarkVibrant,
+    palette.DarkMuted,
+    palette.Vibrant,
+    palette.Muted,
+    palette.LightVibrant
+  ];
+  for (const sw of candidateSwatches) {
+    if (sw && typeof sw.getRgb === "function") {
+      let hex = rgbToHex(sw.getRgb());
+      hex = lightenIfTooDark(hex);
+      if (!swatches.includes(hex)) {
+        swatches.push(hex);
+      }
+    }
+  }
+  return swatches;
+}
 
 exports.handler = async function(event, context) {
+  // Handle CORS & preflight
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
-
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers, body: "" };
   }
 
   try {
-    // 1. Parse URL from request body.
+    // 1. Parse the URL
     const { url } = JSON.parse(event.body) || {};
     if (!url) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "URL is required" }) };
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: "URL is required" }),
+      };
     }
     let fullUrl = url.trim();
     if (!fullUrl.startsWith("http://") && !fullUrl.startsWith("https://")) {
       fullUrl = `https://${fullUrl}`;
     }
 
-    // 2. Fetch the page.
-    const response = await axios.get(fullUrl, { 
-      headers: { "User-Agent": "Mozilla/5.0" }, 
-      timeout: 10000, 
-      maxRedirects: 5 
+    // 2. Fetch page HTML
+    const response = await axios.get(fullUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      timeout: 10000,
+      maxRedirects: 5
     });
     const html = response.data;
     const $ = cheerio.load(html);
     const finalUrl = new URL(response.request.res.responseUrl);
     const domain = finalUrl.hostname.replace("www.", "");
 
-    // 3. Initialize result object.
+    // 3. Initialize results
     const results = {
       brandName: "",
       brandDomain: domain,
       logoUrl: "",
-      brandColor: "#1F2937", // fallback
-      primaryFont: "",
-      // For single product:
-      productName: "",
+      primaryFont: "Merriweather",
+      products: [],           // For multiple products
+      productName: "",        // For the "active" product
       productPrice: "",
       productImageUrl: "",
-      // For multiple products (if applicable)
-      products: []
+      colorSwatches: [],      // All possible color swatches
+      activeColor: "#1F2937"  // The currently chosen color
     };
 
-    // 4. Extract primary font from the HTML (from inline styles/style blocks)
-    const extractedFont = extractPrimaryFont(html);
-    results.primaryFont = extractedFont || "Merriweather";
+    // 4. Extract primary font
+    const foundFont = extractPrimaryFont(html);
+    if (foundFont) {
+      results.primaryFont = foundFont;
+    }
 
-    // 5. Extract Brand Name.
+    // 5. Brand Name
     let brandName = $('meta[property="og:site_name"]').attr("content") ||
                     $('meta[name="application-name"]').attr("content") ||
-                    $('meta[name="twitter:site"]').attr("content") || "";
+                    $('meta[name="twitter:site"]').attr("content") ||
+                    "";
     if (!brandName) {
       const title = $("title").text().trim();
       if (title) {
         brandName = title.split(/\s+[|\-–—]\s+/)[0].trim();
       }
     }
-    if (!brandName) { brandName = domain.split(".")[0]; }
-    // Convert to title case.
-    brandName = brandName.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+    if (!brandName) {
+      brandName = domain.split(".")[0];
+    }
+    // Title-case
+    brandName = brandName.replace(/\w\S*/g, txt => 
+      txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+    );
     results.brandName = brandName;
 
-    // 6. Extract Brand Logo.
+    // 6. Brand Logo
     results.logoUrl = await findBrandLogo($, finalUrl, brandName, domain);
 
-    // 7. Extract Product Info.
-    // First try single-product selectors.
-    const singleProduct = extractSingleProduct($, finalUrl);
-    if (singleProduct.productName || singleProduct.productImageUrl) {
-      results.productName = singleProduct.productName;
-      results.productPrice = singleProduct.productPrice;
-      results.productImageUrl = singleProduct.productImageUrl;
+    // 7. Single vs. Multi-product
+    const single = extractSingleProduct($, finalUrl);
+    if (single.productName || single.productImageUrl) {
+      // Found a single product
+      results.productName = single.productName;
+      results.productPrice = single.productPrice;
+      results.productImageUrl = single.productImageUrl;
+      results.products.push({
+        productName: single.productName,
+        productPrice: single.productPrice,
+        productImageUrl: single.productImageUrl
+      });
     } else {
-      // Fallback to multi-product extraction.
+      // Fallback to multi
       const multi = extractMultiProducts($, finalUrl);
       results.products = multi;
       if (multi.length > 0) {
-        // Use the first product.
+        // Use the first product as active
         results.productName = multi[0].productName;
         results.productPrice = multi[0].productPrice;
         results.productImageUrl = multi[0].productImageUrl;
       }
     }
 
-    // 8. Determine brandColor:
-    // If the page has a meta theme-color, use it.
+    // 8. Color detection
+    // (a) Check meta theme-color
     const metaThemeColor = $('meta[name="theme-color"]').attr("content");
+    let themeColor = "";
     if (metaThemeColor && /^#?[A-Fa-f0-9]{3,6}$/.test(metaThemeColor.trim())) {
-      results.brandColor = metaThemeColor.startsWith("#") ? metaThemeColor.trim() : `#${metaThemeColor.trim()}`;
-    } else if (results.productImageUrl) {
-      // Otherwise, try to extract a color from the product image.
+      themeColor = metaThemeColor.startsWith("#") ? metaThemeColor.trim() : `#${metaThemeColor.trim()}`;
+      themeColor = lightenIfTooDark(themeColor);
+    }
+
+    // (b) Attempt to get swatches from product image, fallback to brand logo
+    if (results.productImageUrl) {
       try {
-        const prodColor = await getColorFromImage(results.productImageUrl);
-        if (prodColor) { results.brandColor = prodColor; }
+        const productSwatches = await getColorSwatches(results.productImageUrl);
+        results.colorSwatches.push(...productSwatches);
       } catch (err) {
-        console.warn("Color extraction from product image failed:", err.message);
-        // If that fails, optionally try the logo.
+        console.warn("Failed to extract product image swatches:", err.message);
+        // fallback to brand logo
         if (results.logoUrl) {
-          const logoColor = await getColorFromImage(results.logoUrl);
-          if (logoColor) { results.brandColor = logoColor; }
+          const logoSwatches = await getColorSwatches(results.logoUrl);
+          results.colorSwatches.push(...logoSwatches);
         }
       }
     } else if (results.logoUrl) {
-      const logoColor = await getColorFromImage(results.logoUrl);
-      if (logoColor) { results.brandColor = logoColor; }
+      const logoSwatches = await getColorSwatches(results.logoUrl);
+      results.colorSwatches.push(...logoSwatches);
     }
 
-    // 9. Return the scraped data.
+    // Ensure uniqueness
+    results.colorSwatches = [...new Set(results.colorSwatches)];
+
+    // (c) Decide activeColor
+    if (themeColor) {
+      // If we found a valid meta themeColor, let's put it at front
+      if (!results.colorSwatches.includes(themeColor)) {
+        results.colorSwatches.unshift(themeColor);
+      }
+    }
+    // If we have no swatches, fallback to #1F2937
+    if (results.colorSwatches.length === 0) {
+      results.colorSwatches.push("#1F2937");
+    }
+    results.activeColor = results.colorSwatches[0];
+
+    // 9. Return
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(results),
+      body: JSON.stringify(results)
     };
 
   } catch (error) {
-    console.error("Error during scraping:", error);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    console.error("Error scraping:", error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: error.message })
+    };
   }
 };

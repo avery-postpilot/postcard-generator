@@ -4,22 +4,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Postcard Generator</title>
+
   <!-- Tailwind CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
-  <!-- Fallback font: Merriweather (if primary font not found) -->
-  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet" />
-  <!-- html2canvas for download -->
+
+  <!-- Fallback Merriweather font if the scraped font isn't available on the user's system -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- html2canvas for capturing the postcard -->
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
   <style>
     body {
-      /* We'll override the font family dynamically based on scraped primaryFont */
       font-family: "Merriweather", serif;
     }
     .postcard {
       position: relative;
       width: 100%;
       max-width: 900px;
-      /* Use a slightly taller ratio to allow for padding */
       aspect-ratio: 9 / 6;
       display: flex;
       overflow: hidden;
@@ -27,40 +32,44 @@
       margin: auto;
       box-shadow: 0 0 10px rgba(0,0,0,0.2);
     }
-    .download-button {
-      position: relative;
-      z-index: 10;
+    /* We'll only apply the scraped font to .postcard, so the UI remains stable. */
+    .postcard * {
+      font-family: var(--postcard-font), "Merriweather", serif;
     }
     .left-panel {
-      padding: 1rem;
+      display: flex;
+      flex-direction: column;
       width: 40%;
+    }
+    .logo-bar {
+      /* The top bar for the logo */
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+    }
+    #logo {
+      max-height: 50px;
+      width: auto;
+      object-fit: contain;
+    }
+    .content-area {
+      /* The rest of the left panel for text */
+      flex: 1;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
       text-align: center;
-      /* Add some inner spacing so text doesn't touch the edge */
-      gap: 0.75rem;
+      padding: 1rem;
+      gap: 0.5rem;
       overflow: auto;
     }
     .right-panel {
       width: 60%;
       position: relative;
     }
-    #logoWrapper {
-      background-color: rgba(255, 255, 255, 0.6);
-      padding: 4px;
-      border-radius: 4px;
-      box-shadow: 0 0 6px rgba(0,0,0,0.3);
-      margin-bottom: 1rem;
-      max-width: 80%;
-    }
-    #logo {
-      width: auto;
-      height: 50px;
-      object-fit: contain;
-    }
-    /* Ensure product image fills its panel */
     #productImage {
       position: absolute;
       inset: 0;
@@ -68,6 +77,23 @@
       height: 100%;
       object-fit: cover;
       object-position: 50% 50%;
+    }
+    #discountBox {
+      border: 2px solid currentColor;
+      padding: 0.25rem 0.5rem;
+      font-weight: bold;
+      display: inline-block;
+    }
+    #fallback {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background-color: #1F2937;
+      color: #fff;
+    }
+    #fallbackContent {
+      padding: 1rem;
     }
   </style>
 </head>
@@ -77,46 +103,101 @@
       <h1 class="text-3xl font-bold text-gray-800">Postcard Generator</h1>
       <p class="text-gray-600">Generate a postcard from your Shopify store URL</p>
     </header>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <!-- Left: Settings -->
+      <!-- Left column: Settings -->
       <div class="bg-white p-6 rounded-lg shadow-md">
         <h2 class="text-xl font-semibold mb-4">Enter Store URL</h2>
         <form id="postcardForm" class="space-y-4">
           <div>
-            <input type="url" id="websiteUrl" name="websiteUrl" placeholder="https://example.myshopify.com" class="w-full border border-gray-300 p-2 rounded" required />
+            <input
+              type="url"
+              id="websiteUrl"
+              name="websiteUrl"
+              placeholder="https://example.myshopify.com"
+              class="w-full border border-gray-300 p-2 rounded"
+              required
+            />
           </div>
-          <div class="flex gap-2">
-            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">Generate Postcard</button>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              Generate Postcard
+            </button>
+            <button
+              id="anotherProductBtn"
+              type="button"
+              class="hidden bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded"
+            >
+              Try Another Product
+            </button>
+            <button
+              id="anotherColorBtn"
+              type="button"
+              class="hidden bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded"
+            >
+              Try Another Color
+            </button>
           </div>
         </form>
         <div class="mt-4">
-          <button id="downloadButton" class="download-button bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">Download Postcard</button>
+          <button
+            id="downloadButton"
+            class="download-button bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+          >
+            Download Postcard
+          </button>
         </div>
       </div>
 
-      <!-- Right: Postcard Preview -->
+      <!-- Right column: Postcard Preview -->
       <div>
         <h2 class="text-xl font-semibold mb-4">Preview</h2>
+
+        <!-- Normal postcard layout -->
         <div id="postcard" class="postcard">
-          <div id="postcard-left" class="left-panel" style="background-color: #1F2937; color: #fff;">
-            <!-- Logo (if available) -->
-            <div id="logoWrapper" style="display: none;">
+          <!-- Left panel -->
+          <div class="left-panel">
+            <!-- Top bar for the logo -->
+            <div id="logoBar" class="logo-bar" style="background-color: #1F2937;">
               <img id="logo" alt="Brand Logo" />
             </div>
-            <!-- Product info -->
-            <div id="productDetails">
-              <h3 id="productName" class="text-lg font-bold"></h3>
-              <p id="productPrice" class="text-md"></p>
+            <!-- Content area -->
+            <div id="contentArea" class="content-area" style="background-color: #1F2937; color: #fff;">
+              <h3 id="helloText" class="text-xl">Hello, Amanda!</h3>
+              <div>
+                <span>Shop Our Sale Today</span>
+                <br />
+                <span>Get up to 20% OFF</span>
+                <br />
+                <span>Use code: <span id="discountBox">DIRECTMAIL20</span></span>
+              </div>
+              <div class="mt-4">
+                <h3 id="productName" class="text-lg font-bold"></h3>
+                <p id="productPrice" class="text-md"></p>
+              </div>
+              <p id="brandURL" class="text-sm mt-6"></p>
             </div>
           </div>
-          <div id="postcard-right" class="right-panel">
-            <img id="productImage" src="" alt="Product Image" style="display: none;" />
+
+          <!-- Right panel: product image -->
+          <div class="right-panel">
+            <img
+              id="productImage"
+              src=""
+              alt="Product Image"
+              style="display: none;"
+            />
           </div>
         </div>
-        <!-- Fallback layout -->
-        <div id="fallback" class="postcard flex items-center justify-center" style="display: none; background-color: #1F2937; color: #fff;">
-          <div class="text-center p-4">
-            <p id="fallbackText" class="text-2xl font-bold"></p>
+
+        <!-- Fallback layout if no product data -->
+        <div id="fallback" class="postcard" style="display: none;">
+          <div id="fallbackContent">
+            <h2 id="fallbackBrandName" class="text-3xl font-bold mb-4"></h2>
+            <p id="fallbackBrandURL" class="text-xl"></p>
           </div>
         </div>
       </div>
@@ -124,29 +205,64 @@
   </div>
 
   <script>
-    // When the document loads, set up event listeners.
+    let allProducts = [];       // array of product objects
+    let currentProductIndex = 0;
+    let allColors = [];         // array of color swatches
+    let currentColorIndex = 0;
+    let primaryFont = "Merriweather"; // fallback
+
     document.addEventListener("DOMContentLoaded", () => {
       const form = document.getElementById("postcardForm");
+      const anotherProductBtn = document.getElementById("anotherProductBtn");
+      const anotherColorBtn = document.getElementById("anotherColorBtn");
       const downloadBtn = document.getElementById("downloadButton");
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const url = document.getElementById("websiteUrl").value.trim();
         if (!url) return alert("Please enter a URL.");
+
         try {
-          const data = await extractWebsiteData(url);
+          const data = await scrapeData(url);
           console.log("Scraped Data:", data);
-          updatePostcard(data);
+
+          // Store relevant arrays
+          allProducts = data.products || [];
+          currentProductIndex = 0;
+          allColors = data.colorSwatches || [];
+          currentColorIndex = 0;
+          primaryFont = data.primaryFont || "Merriweather";
+
+          // Show or hide "Try Another" buttons
+          anotherProductBtn.style.display = (allProducts.length > 1) ? "inline-block" : "none";
+          anotherColorBtn.style.display = (allColors.length > 1) ? "inline-block" : "none";
+
+          // Update the postcard with the "active" product and color
+          updatePostcard(data, 0, 0);
         } catch (err) {
           console.error(err);
           alert("Scraping failed. Check console for details.");
         }
       });
 
+      anotherProductBtn.addEventListener("click", () => {
+        if (allProducts.length < 2) return;
+        currentProductIndex = (currentProductIndex + 1) % allProducts.length;
+        updatePostcard(null, currentProductIndex, currentColorIndex);
+      });
+
+      anotherColorBtn.addEventListener("click", () => {
+        if (allColors.length < 2) return;
+        currentColorIndex = (currentColorIndex + 1) % allColors.length;
+        updatePostcard(null, currentProductIndex, currentColorIndex);
+      });
+
       downloadBtn.addEventListener("click", () => {
-        const target = document.getElementById("postcard").style.display !== "none" ?
-                       document.getElementById("postcard") :
-                       document.getElementById("fallback");
+        const postcard = document.getElementById("postcard");
+        const fallback = document.getElementById("fallback");
+        const isFallbackVisible = (fallback.style.display !== "none");
+        const target = isFallbackVisible ? fallback : postcard;
+
         html2canvas(target).then((canvas) => {
           const link = document.createElement("a");
           link.download = "postcard.png";
@@ -156,8 +272,8 @@
       });
     });
 
-    // Fetch scraped data from our Netlify function.
-    async function extractWebsiteData(url) {
+    // Call the Netlify function
+    async function scrapeData(url) {
       const res = await fetch("/.netlify/functions/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -165,38 +281,80 @@
       });
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Scrape failed: ${res.status} ${res.statusText} - ${errText}`);
+        throw new Error(`Scrape failed: ${res.status} - ${errText}`);
       }
       return await res.json();
     }
 
-    // Update the postcard UI using the scraped data.
-    function updatePostcard(data) {
-      // Apply the scraped primary font to the postcard.
-      document.documentElement.style.setProperty("--primary-font", data.primaryFont || "Merriweather");
-      document.body.style.fontFamily = `var(--primary-font)`;
-
-      // Set background color on left panel.
-      const leftPanel = document.getElementById("postcard-left");
-      leftPanel.style.backgroundColor = data.brandColor || "#1F2937";
-      // Determine appropriate text color based on background.
-      leftPanel.style.color = getContrastColor(data.brandColor || "#1F2937");
-
-      // If a brand logo is available, show it; otherwise, hide the logo wrapper.
-      const logoWrapper = document.getElementById("logoWrapper");
-      const logoImg = document.getElementById("logo");
-      if (data.logoUrl) {
-        logoWrapper.style.display = "block";
-        logoImg.src = data.logoUrl;
-      } else {
-        logoWrapper.style.display = "none";
+    // Update the postcard UI
+    function updatePostcard(fullData, productIdx, colorIdx) {
+      // If we got fresh data from the server, use it. Otherwise, rely on stored arrays.
+      let data = fullData;
+      if (!data) {
+        // Reconstruct minimal data from stored arrays
+        data = {
+          brandName: "", // not used in final design, but we have it
+          brandDomain: "",
+          logoUrl: "",
+          primaryFont,
+          products: allProducts,
+          colorSwatches: allColors,
+          activeColor: allColors[colorIdx] || "#1F2937"
+        };
       }
 
-      // Set product name and price.
+      // Merge "active" product into data
+      const activeProduct = allProducts[productIdx] || {};
+      data.productName = activeProduct.productName || "";
+      data.productPrice = activeProduct.productPrice || "";
+      data.productImageUrl = activeProduct.productImageUrl || "";
+      data.activeColor = allColors[colorIdx] || "#1F2937";
+
+      // If no product data found, show fallback
+      if (!data.productName && !data.productImageUrl) {
+        document.getElementById("postcard").style.display = "none";
+        const fallback = document.getElementById("fallback");
+        fallback.style.display = "flex";
+        document.getElementById("fallbackBrandName").textContent = data.brandName || "";
+        document.getElementById("fallbackBrandURL").textContent = data.brandDomain || "";
+        return;
+      }
+
+      // Otherwise, show normal postcard
+      document.getElementById("postcard").style.display = "flex";
+      document.getElementById("fallback").style.display = "none";
+
+      // Apply the font only to the postcard
+      document.querySelector(".postcard").style.setProperty("--postcard-font", data.primaryFont);
+
+      // Update top bar & content area colors
+      const logoBar = document.getElementById("logoBar");
+      logoBar.style.backgroundColor = data.activeColor;
+      const contentArea = document.getElementById("contentArea");
+      contentArea.style.backgroundColor = data.activeColor;
+
+      // Decide text color
+      const textColor = getContrastColor(data.activeColor);
+      contentArea.style.color = textColor;
+      logoBar.style.color = textColor;
+
+      // Brand logo
+      const logoEl = document.getElementById("logo");
+      if (data.logoUrl) {
+        logoEl.src = data.logoUrl;
+        logoEl.style.display = "block";
+      } else {
+        logoEl.style.display = "none";
+      }
+
+      // Product Name & Price
       document.getElementById("productName").textContent = data.productName || "";
       document.getElementById("productPrice").textContent = data.productPrice || "";
 
-      // Set product image.
+      // Domain at bottom
+      document.getElementById("brandURL").textContent = data.brandDomain || "";
+
+      // Product Image
       const productImage = document.getElementById("productImage");
       if (data.productImageUrl) {
         productImage.src = data.productImageUrl;
@@ -204,27 +362,19 @@
       } else {
         productImage.style.display = "none";
       }
-
-      // If product name and image are missing, show fallback.
-      if (!data.productName && !data.productImageUrl) {
-        document.getElementById("postcard").style.display = "none";
-        const fallback = document.getElementById("fallback");
-        fallback.style.display = "flex";
-        document.getElementById("fallbackText").textContent = `${data.brandName}\n${data.brandDomain}`;
-      } else {
-        document.getElementById("postcard").style.display = "flex";
-        document.getElementById("fallback").style.display = "none";
-      }
     }
 
-    // Utility: Contrast function – returns white or black.
+    // Utility: returns black or white for best contrast
     function getContrastColor(hex) {
       hex = hex.replace("#", "");
+      if (hex.length < 6) {
+        hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+      }
       const r = parseInt(hex.substr(0,2),16);
       const g = parseInt(hex.substr(2,2),16);
       const b = parseInt(hex.substr(4,2),16);
-      const yiq = ((r*299)+(g*587)+(b*114))/1000;
-      return yiq >= 128 ? "#000" : "#fff";
+      const yiq = (r*299 + g*587 + b*114) / 1000;
+      return (yiq >= 128) ? "#000" : "#fff";
     }
   </script>
 </body>

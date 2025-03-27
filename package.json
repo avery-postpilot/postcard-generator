@@ -1,7 +1,7 @@
 {
   "name": "postcard-generator",
   "version": "1.0.0",
-  "description": "Postcard generator tool for PostPilot",
+  "description": "Postcard generator tool for Shopify stores (scrapes publicly available data)",
   "scripts": {
     "start": "netlify dev"
   },

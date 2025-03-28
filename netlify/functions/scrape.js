@@ -1,15 +1,7 @@
-// This solution enhances the PostPilot Postcard Generator with new functionality:
-// 1. "Try Another Product" - Cycle through multiple products extracted during scraping
-// 2. "Try Another Color" - Extract and use colors from the product image
-// 3. "Change Font Color" - Toggle between contrasting text colors and basic options
-
-// ====================== PART 1: IMPROVED SCRAPE.JS ======================
-// This is a modified version of old_scrape.js with enhanced product and color extraction
-
-// netlify/functions/scrape.js (New Implementation)
+// Enhanced scraper function for PostPilot Postcard Generator
 const axios = require("axios");
 const cheerio = require("cheerio");
-const { Vibrant } = require("node-vibrant/node");
+const { Vibrant } = require("node-vibrant");
 
 /* ----------------------------------
    Helper Functions
@@ -39,6 +31,8 @@ function lightenIfTooDark(hex) {
 
 // Convert relative URLs => absolute
 function fixRelativeUrl(url, baseUrl) {
+  if (!url) return "";
+  
   if (url.startsWith("//")) {
     return `${baseUrl.protocol}${url}`;
   } else if (url.startsWith("/")) {
@@ -79,17 +73,22 @@ async function findBrandLogo($, finalUrl, brandName, domain) {
     'header img[src*="logo"]',
     'img[src*="logo" i]',
     'a[href="/"] img',
+    'header a img', // Often brand logos are in header links
+    '.header img', // Another common location
+    '.navbar-brand img' // Bootstrap-style navigation
   ];
+  
   const potentialLogos = [];
   for (const sel of logoSelectors) {
     $(sel).each((_, el) => {
-      let src = $(el).attr("src") || $(el).attr("data-src");
+      let src = $(el).attr("src") || $(el).attr("data-src") || $(el).attr("data-srcset")?.split(',')[0]?.trim()?.split(' ')[0];
       if (src) {
         src = fixRelativeUrl(src, finalUrl);
         potentialLogos.push(src);
       }
     });
   }
+  
   let best = "";
   const brandLower = brandName.toLowerCase();
   for (const src of potentialLogos) {
@@ -98,137 +97,159 @@ async function findBrandLogo($, finalUrl, brandName, domain) {
       break;
     }
   }
+  
   if (!best && potentialLogos.length > 0) {
     best = potentialLogos[0];
   }
+  
   return best || `https://logo.clearbit.com/${domain}`;
 }
 
-// Attempt single-product extraction
-function extractSingleProduct($, finalUrl) {
-  const productName = $('h1.product-title').text().trim() ||
-                      $('meta[property="og:title"]').attr("content") ||
-                      "";
-  const rawPrice = $('.price, .product-price, [class*="price"]').first().text().trim() || "";
-  const productPrice = parseFinalPrice(rawPrice);
-
-  let productImageUrl = "";
-  const mainImg = $('img#main-product-image, img.product__image').first();
-  if (mainImg.length) {
-    let imgSrc = mainImg.attr("src") || mainImg.attr("data-src");
-    if (imgSrc) {
-      productImageUrl = fixRelativeUrl(imgSrc, finalUrl);
-    }
-  }
-  if (!productImageUrl) {
-    const ogImg = $('meta[property="og:image"]').attr("content");
-    if (ogImg) {
-      productImageUrl = ogImg;
-    }
-  }
-
-  return { productName, productPrice, productImageUrl };
-}
-
-// ENHANCED: Extract multiple products more aggressively
-function extractMultiProducts($, finalUrl) {
-  const products = [];
+// Attempt to extract image URLs from the page
+function extractImageUrls($, finalUrl) {
+  const imageUrls = [];
   
-  // Original selectors plus more
-  const productSelectors = [
-    ".product-card",
-    ".product-item",
-    ".bestseller",
-    ".featured-product",
-    '[class*="product"]',
-    '[class*="Product"]',
-    '[id*="product"]',
-    '[id*="Product"]',
-    ".item",
-    ".product",
-    "article",
-    "li.item",
-    ".collection-item",
-    ".grid-item",
-    ".grid-product"
+  // Look for product images, hero images, and other high-quality images
+  const imageSelectors = [
+    'img.product-image',
+    'img.featured-image',
+    'img.hero-image',
+    'img.banner-image',
+    '.product-gallery img',
+    '.slideshow img',
+    '.carousel img',
+    '.hero img',
+    '.banner img',
+    'img[width][height]', // Images with dimensions are often important
+    'img[src*="product"]',
+    'img[alt*="product"]',
+    'img[class*="product"]',
+    'img[class*="Product"]',
+    'img[src*="hero"]',
+    'img[class*="hero"]',
+    'img[class*="banner"]',
+    'img'  // Fallback to all images
   ];
   
-  $(productSelectors.join(",")).each((_, el) => {
-    const productEl = $(el);
-    
-    // More comprehensive name extraction
-    let name = "";
-    const nameSelectors = [
-      "h2", "h3", ".product-title", ".product-name", 
-      '[class*="title"]', '[class*="name"]', "h4", "h1",
-      '.title', '.name', '[data-product-title]'
-    ];
-    
-    for (const sel of nameSelectors) {
-      const nEl = productEl.find(sel).first();
-      if (nEl && nEl.text().trim()) {
-        name = nEl.text().trim();
-        break;
-      }
-    }
-    
-    // More comprehensive price extraction
-    const priceSelectors = [
-      '[class*="price"]', '.price-item', '.price--sale', 
-      '.regular-price', '.special-price', '.product-price'
-    ];
-    
-    let rawPrice = "";
-    for (const sel of priceSelectors) {
-      const pEl = productEl.find(sel).first();
-      if (pEl && pEl.text().trim()) {
-        rawPrice = pEl.text().trim();
-        break;
-      }
-    }
-    
-    const price = parseFinalPrice(rawPrice);
-
-    // More comprehensive image extraction
-    let productImageUrl = "";
-    const imgSelectors = [
-      "img", ".product-image img", ".card__image-container img", 
-      ".grid-view-item__image", "[data-product-image]"
-    ];
-    
-    for (const sel of imgSelectors) {
-      const imgEl = productEl.find(sel).first();
-      if (imgEl && imgEl.length) {
-        let imgSrc = imgEl.attr("src") || imgEl.attr("data-src") || imgEl.attr("data-srcset")?.split(',')[0]?.trim()?.split(' ')[0];
-        if (imgSrc) {
-          productImageUrl = fixRelativeUrl(imgSrc, finalUrl);
-          break;
+  // Visit each selector and extract image URLs
+  for (const selector of imageSelectors) {
+    $(selector).each((_, el) => {
+      // Try various image source attributes
+      const src = $(el).attr('src') || 
+                 $(el).attr('data-src') || 
+                 $(el).attr('data-lazy-src') ||
+                 ($(el).attr('srcset') || '').split(',')[0]?.trim()?.split(' ')[0];
+      
+      if (src) {
+        // Ignore very small images, svg, base64 data, and placeholders
+        const ignoredPatterns = [
+          /base64/,
+          /\.svg/,
+          /placeholder/,
+          /blank/,
+          /transparent/,
+          /icon/,
+          /logo/
+        ];
+        
+        const isIgnored = ignoredPatterns.some(pattern => src.match(pattern));
+        
+        // Get width and height if available
+        const width = parseInt($(el).attr('width') || $(el).css('width') || '0');
+        const height = parseInt($(el).attr('height') || $(el).css('height') || '0');
+        
+        // Minimum dimensions for useful images
+        const isTooSmall = (width > 0 && width < 100) || (height > 0 && height < 100);
+        
+        if (!isIgnored && !isTooSmall && src.trim() !== '') {
+          const fullUrl = fixRelativeUrl(src, finalUrl);
+          
+          // Avoid duplicates
+          if (!imageUrls.includes(fullUrl)) {
+            imageUrls.push(fullUrl);
+          }
         }
       }
-    }
+    });
     
-    // Ensure we have at least a name or image before adding to products
-    if ((name || productImageUrl) && (name !== "" || productImageUrl !== "")) {
-      // Avoid duplicates by checking if we already have this product
-      const isDuplicate = products.some(product => 
-        (product.productName === name && name !== "") || 
-        (product.productImageUrl === productImageUrl && productImageUrl !== "")
-      );
-      
-      if (!isDuplicate) {
-        products.push({ productName: name, productPrice: price, productImageUrl });
-      }
+    // Once we have a reasonable number of images, stop looking
+    if (imageUrls.length >= 5) {
+      break;
     }
-  });
+  }
   
-  return products;
+  // Also check for meta og:image which is often high quality
+  const ogImage = $('meta[property="og:image"]').attr('content');
+  if (ogImage && !imageUrls.includes(ogImage)) {
+    imageUrls.unshift(ogImage);  // Add at the beginning as it's typically the highest quality
+  }
+  
+  return imageUrls;
 }
 
-// ENHANCED: Extract multiple color swatches from an image using Vibrant
-// Now generates more colors for a richer palette
+// Generate text color options based on background color
+function getTextColorOptions(backgroundColor) {
+  // Parse the hex color
+  const hex = backgroundColor.replace("#", "");
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  
+  // Calculate luminance - standard formula for perceived brightness
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  
+  // Default options - always include black, white, and dark gray
+  const textColors = ["#FFFFFF", "#000000", "#333333"];
+  
+  // Add contrast color based on luminance
+  if (luminance > 128) {
+    // Light background needs dark text
+    textColors.push("#4B5563"); // Medium gray
+    textColors.push("#6B7280"); // Light gray
+  } else {
+    // Dark background needs light text
+    textColors.push("#F3F4F6"); // Light gray
+    textColors.push("#E5E7EB"); // Lighter gray
+  }
+  
+  // Add a complementary color
+  const complement = getComplementaryColor(backgroundColor);
+  if (!textColors.includes(complement)) {
+    textColors.push(complement);
+  }
+  
+  return textColors;
+}
+
+// Helper for getting a complementary color
+function getComplementaryColor(hexColor) {
+  // Remove the # if present
+  const hex = hexColor.replace("#", "");
+  
+  // Convert to RGB
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  
+  // Get the complement (255 - value)
+  const compR = 255 - r;
+  const compG = 255 - g;
+  const compB = 255 - b;
+  
+  // Convert back to hex
+  return `#${compR.toString(16).padStart(2, "0")}${compG.toString(16).padStart(2, "0")}${compB.toString(16).padStart(2, "0")}`;
+}
+
+// Extract color swatches from an image using Vibrant
 async function getColorSwatches(imgUrl) {
   try {
-    const axiosResp = await axios.get(imgUrl, { responseType: "arraybuffer" });
+    const axiosResp = await axios.get(imgUrl, { 
+      responseType: "arraybuffer",
+      timeout: 5000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
     const buffer = Buffer.from(axiosResp.data, "binary");
     const palette = await Vibrant.from(buffer).getPalette();
 
@@ -263,59 +284,6 @@ async function getColorSwatches(imgUrl) {
   }
 }
 
-// NEW: Generate text color options based on background color
-function getTextColorOptions(backgroundColor) {
-  // Parse the hex color
-  const hex = backgroundColor.replace("#", "");
-  const r = parseInt(hex.substr(0, 2), 16);
-  const g = parseInt(hex.substr(2, 2), 16);
-  const b = parseInt(hex.substr(4, 2), 16);
-  
-  // Calculate luminance - standard formula for perceived brightness
-  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-  
-  // Default options - always include black, white, and dark gray
-  const textColors = ["#FFFFFF", "#000000", "#333333"];
-  
-  // Add contrast color based on luminance
-  if (luminance > 128) {
-    // Dark background needs light text
-    textColors.push("#F3F4F6"); // Light gray
-    textColors.push("#E5E7EB"); // Lighter gray
-  } else {
-    // Light background needs dark text
-    textColors.push("#4B5563"); // Medium gray
-    textColors.push("#6B7280"); // Light gray
-  }
-  
-  // Add a complementary color
-  const complement = getComplementaryColor(backgroundColor);
-  if (!textColors.includes(complement)) {
-    textColors.push(complement);
-  }
-  
-  return textColors;
-}
-
-// Helper for getting a complementary color
-function getComplementaryColor(hexColor) {
-  // Remove the # if present
-  const hex = hexColor.replace("#", "");
-  
-  // Convert to RGB
-  const r = parseInt(hex.substr(0, 2), 16);
-  const g = parseInt(hex.substr(2, 2), 16);
-  const b = parseInt(hex.substr(4, 2), 16);
-  
-  // Get the complement (255 - value)
-  const compR = 255 - r;
-  const compG = 255 - g;
-  const compB = 255 - b;
-  
-  // Convert back to hex
-  return `#${compR.toString(16).padStart(2, "0")}${compG.toString(16).padStart(2, "0")}${compB.toString(16).padStart(2, "0")}`;
-}
-
 exports.handler = async function(event, context) {
   // Handle CORS & preflight
   const headers = {
@@ -323,6 +291,7 @@ exports.handler = async function(event, context) {
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
+  
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers, body: "" };
   }
@@ -337,6 +306,7 @@ exports.handler = async function(event, context) {
         body: JSON.stringify({ error: "URL is required" }),
       };
     }
+    
     let fullUrl = url.trim();
     if (!fullUrl.startsWith("http://") && !fullUrl.startsWith("https://")) {
       fullUrl = `https://${fullUrl}`;
@@ -344,10 +314,15 @@ exports.handler = async function(event, context) {
 
     // 2. Fetch page HTML
     const response = await axios.get(fullUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
+      headers: { 
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5"
+      },
       timeout: 10000,
       maxRedirects: 5
     });
+    
     const html = response.data;
     const $ = cheerio.load(html);
     const finalUrl = new URL(response.request.res.responseUrl);
@@ -359,11 +334,8 @@ exports.handler = async function(event, context) {
       brandDomain: domain,
       logoUrl: "",
       primaryFont: "Merriweather",
-      products: [],           // For multiple products
-      productName: "",        // For the "active" product
-      productPrice: "",
-      productImageUrl: "",
-      colorSwatches: [],      // All possible color swatches
+      images: [],            // For all images
+      colorSwatches: [],     // All possible color swatches
       activeColor: "#1F2937", // The currently chosen color
       textColorOptions: ["#FFFFFF", "#000000", "#333333"] // Default text color options
     };
@@ -379,59 +351,34 @@ exports.handler = async function(event, context) {
                     $('meta[name="application-name"]').attr("content") ||
                     $('meta[name="twitter:site"]').attr("content") ||
                     "";
+                    
     if (!brandName) {
       const title = $("title").text().trim();
       if (title) {
         brandName = title.split(/\s+[|\-–—]\s+/)[0].trim();
       }
     }
+    
     if (!brandName) {
       brandName = domain.split(".")[0];
     }
+    
     // Title-case
     brandName = brandName.replace(/\w\S*/g, txt => 
       txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
     );
+    
     results.brandName = brandName;
 
     // 6. Brand Logo
     results.logoUrl = await findBrandLogo($, finalUrl, brandName, domain);
 
-    // 7. Single vs. Multi-product
-    const single = extractSingleProduct($, finalUrl);
-    if (single.productName || single.productImageUrl) {
-      // Found a single product
-      results.productName = single.productName;
-      results.productPrice = single.productPrice;
-      results.productImageUrl = single.productImageUrl;
-      results.products.push({
-        productName: single.productName,
-        productPrice: single.productPrice,
-        productImageUrl: single.productImageUrl
-      });
-    }
+    // 7. Extract images
+    results.images = extractImageUrls($, finalUrl);
     
-    // Always try to find multiple products
-    const multi = extractMultiProducts($, finalUrl);
-    
-    // Add any unique products from multi that aren't in results.products yet
-    for (const product of multi) {
-      const isDuplicate = results.products.some(p => 
-        (p.productName === product.productName && product.productName !== "") || 
-        (p.productImageUrl === product.productImageUrl && product.productImageUrl !== "")
-      );
-      
-      if (!isDuplicate) {
-        results.products.push(product);
-      }
-    }
-    
-    // If we didn't find a single product but found multiple products
-    if ((!single.productName && !single.productImageUrl) && results.products.length > 0) {
-      // Use the first product as active
-      results.productName = results.products[0].productName;
-      results.productPrice = results.products[0].productPrice;
-      results.productImageUrl = results.products[0].productImageUrl;
+    // If no images found, add a fallback
+    if (results.images.length === 0) {
+      results.images.push(`https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}`);
     }
 
     // 8. Color detection
@@ -443,19 +390,17 @@ exports.handler = async function(event, context) {
       themeColor = lightenIfTooDark(themeColor);
     }
 
-    // (b) Get color swatches from all product images if available
-    for (const product of results.products) {
-      if (product.productImageUrl) {
-        try {
-          const productSwatches = await getColorSwatches(product.productImageUrl);
-          results.colorSwatches.push(...productSwatches);
-        } catch (err) {
-          console.warn(`Failed to extract swatches from product image: ${product.productImageUrl}`, err.message);
-        }
+    // (b) Extract colors from first image
+    if (results.images.length > 0) {
+      try {
+        const imageSwatches = await getColorSwatches(results.images[0]);
+        results.colorSwatches.push(...imageSwatches);
+      } catch (err) {
+        console.warn(`Failed to extract swatches from image: ${results.images[0]}`, err.message);
       }
     }
     
-    // If no product image colors, try the logo
+    // If still no colors, try the logo
     if (results.colorSwatches.length === 0 && results.logoUrl) {
       try {
         const logoSwatches = await getColorSwatches(results.logoUrl);
@@ -478,7 +423,7 @@ exports.handler = async function(event, context) {
     
     // If we have no swatches, fallback to #1F2937
     if (results.colorSwatches.length === 0) {
-      results.colorSwatches.push("#1F2937");
+      results.colorSwatches.push("#1F2937", "#2563EB", "#7C3AED", "#DB2777", "#059669");
     }
     
     results.activeColor = results.colorSwatches[0];
@@ -498,137 +443,10 @@ exports.handler = async function(event, context) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({ 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+      })
     };
   }
 };
-
-// ====================== PART 2: FRONTEND UPDATES ======================
-// These changes need to be made to index.html
-
-/*
-// 1. Add the "Change Font Color" button in the buttons section
-// Add this after the "Try Another Color" button
-
-<button
-  id="changeFontColorBtn"
-  type="button"
-  class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
->
-  Change Font Color
-</button>
-*/
-
-/*
-// 2. Add new variables to track font colors
-// Add this to the script section after the existing variables
-
-let textColorOptions = ["#FFFFFF", "#000000", "#333333"];
-let currentTextColorIndex = 0;
-*/
-
-/*
-// 3. Add event listener for the Change Font Color button
-// Add this after the other button event listeners
-
-// "Change Font Color" cycles through textColorOptions
-changeFontColorBtn.addEventListener("click", () => {
-  if (textColorOptions.length < 2) {
-    console.log("No additional text colors to cycle through.");
-    return;
-  }
-  currentTextColorIndex = (currentTextColorIndex + 1) % textColorOptions.length;
-  updatePostcard(null, currentProductIndex, currentColorIndex);
-});
-*/
-
-/*
-// 4. Update the postcard update function to handle text color changes
-// This is a more comprehensive update to the updatePostcard function
-
-function updatePostcard(fullData, productIdx, colorIdx) {
-  // If we got fresh data from the server, use it. Otherwise, rely on stored arrays.
-  let data = fullData;
-  if (!data) {
-    data = {
-      primaryFont,
-      products: allProducts,
-      colorSwatches: allColors,
-      textColorOptions: textColorOptions,
-      brandName: "",
-      brandDomain: "",
-      logoUrl: "",
-    };
-  } else {
-    // Store text color options if they're in the data
-    if (data.textColorOptions && data.textColorOptions.length > 0) {
-      textColorOptions = data.textColorOptions;
-      currentTextColorIndex = 0;
-    }
-  }
-
-  // Merge "active" product into data
-  const activeProduct = allProducts[productIdx] || {};
-  data.productName = activeProduct.productName || "";
-  data.productPrice = activeProduct.productPrice || "";
-  data.productImageUrl = activeProduct.productImageUrl || "";
-
-  // Active color
-  const color = allColors[colorIdx] || "#1F2937";
-  
-  // Active text color
-  const textColor = textColorOptions[currentTextColorIndex] || "#FFFFFF";
-
-  // If no product data, show fallback
-  if (!data.productName && !data.productImageUrl) {
-    document.getElementById("postcard").style.display = "none";
-    const fallback = document.getElementById("fallback");
-    fallback.style.display = "flex";
-    document.getElementById("fallbackBrandName").textContent = data.brandName || "";
-    document.getElementById("fallbackBrandURL").textContent = data.brandDomain || "";
-    return;
-  }
-
-  // Otherwise, show normal postcard
-  document.getElementById("postcard").style.display = "flex";
-  document.getElementById("fallback").style.display = "none";
-
-  // Apply the font only to the postcard
-  document.querySelector(".postcard").style.setProperty("--postcard-font", data.primaryFont);
-
-  // Update the top bar & content area
-  const logoBar = document.getElementById("logoBar");
-  logoBar.style.backgroundColor = color;
-  const contentArea = document.getElementById("contentArea");
-  contentArea.style.backgroundColor = color;
-
-  // Apply text color to all text elements in the postcard
-  logoBar.style.color = textColor;
-  contentArea.style.color = textColor;
-  document.getElementById("discountBox").style.borderColor = textColor;
-
-  // Logo
-  const logoEl = document.getElementById("logo");
-  if (data.logoUrl) {
-    logoEl.src = data.logoUrl;
-    logoEl.style.display = "block";
-  } else {
-    logoEl.style.display = "none";
-  }
-
-  // Product name & price
-  document.getElementById("productName").textContent = data.productName;
-  document.getElementById("productPrice").textContent = data.productPrice;
-
-  // Domain near bottom
-  document.getElementById("brandURL").textContent = data.brandDomain || "";
-
-  // Product image
-  const productImage = document.getElementById("productImage");
-  if (data.productImageUrl) {
-    productImage.src = data.productImageUrl;
-    productImage.style.display = "block";
-  } else {
-    productImage.style.display = "none";
-  }
-}

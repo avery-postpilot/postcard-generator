@@ -14,7 +14,8 @@
     "cheerio",
     "node-vibrant",
     "puppeteer-core",
-    "chrome-aws-lambda"
+    "chrome-aws-lambda",
+    "axios"
   ]
   
 [dev]

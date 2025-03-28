@@ -297,6 +297,13 @@
     let textColorOptions = ["#FFFFFF", "#000000", "#333333"];
     let currentTextColorIndex = 0;
     let primaryFont = "Merriweather"; // fallback
+    
+    // Store brand data globally to persist between customizations
+    let brandData = {
+      brandName: "",
+      brandDomain: "",
+      logoUrl: ""
+    };
 
     document.addEventListener("DOMContentLoaded", () => {
       const form = document.getElementById("postcardForm");
@@ -320,7 +327,7 @@
           return;
         }
         currentImageIndex = (currentImageIndex + 1) % allImages.length;
-        updatePostcard(null, currentImageIndex, currentColorIndex);
+        updatePostcard(brandData, currentImageIndex, currentColorIndex);
         showStatus(`Image ${currentImageIndex + 1}/${allImages.length}`);
         
         // When image changes, we'll check if we need to extract colors from it
@@ -334,7 +341,7 @@
           return;
         }
         currentColorIndex = (currentColorIndex + 1) % allColors.length;
-        updatePostcard(null, currentImageIndex, currentColorIndex);
+        updatePostcard(brandData, currentImageIndex, currentColorIndex);
         showStatus(`Color ${currentColorIndex + 1}/${allColors.length}`);
         
         // When color changes, generate new text color options
@@ -350,7 +357,7 @@
           return;
         }
         currentTextColorIndex = (currentTextColorIndex + 1) % textColorOptions.length;
-        updatePostcard(null, currentImageIndex, currentColorIndex);
+        updatePostcard(brandData, currentImageIndex, currentColorIndex);
         showStatus(`Text Color ${currentTextColorIndex + 1}/${textColorOptions.length}`);
       });
 
@@ -376,6 +383,13 @@
         try {
           const data = await scrapeData(url);
           console.log("Scraped Data:", data);
+
+          // Store brand data globally to persist between customizations
+          brandData = {
+            brandName: data.brandName || "",
+            brandDomain: data.brandDomain || "",
+            logoUrl: data.logoUrl || ""
+          };
 
           // Store relevant arrays
           allImages = data.images || [];
@@ -406,6 +420,14 @@
           errorMessage.classList.remove("hidden");
           // Use fallback data
           const fallbackData = fallbackExtraction(url);
+          
+          // Store brand data from fallback
+          brandData = {
+            brandName: fallbackData.brandName || "",
+            brandDomain: fallbackData.brandDomain || "",
+            logoUrl: fallbackData.logoUrl || ""
+          };
+          
           updatePostcard(fallbackData, 0, 0);
           
           // Store relevant arrays from fallback
@@ -660,9 +682,9 @@
           images: allImages,
           colorSwatches: allColors,
           textColorOptions: textColorOptions,
-          brandName: "",
-          brandDomain: "",
-          logoUrl: "",
+          brandName: brandData.brandName,
+          brandDomain: brandData.brandDomain,
+          logoUrl: brandData.logoUrl,
         };
       } else {
         // Store text color options if they're in the data

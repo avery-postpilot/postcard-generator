@@ -11,9 +11,9 @@
     rel="stylesheet"
   />
 
-  <!-- Fallback Merriweather font if the scraped font isn't available -->
+  <!-- Multiple font options for cycling -->
   <link
-    href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&family=Roboto:wght@400;700&family=Lora:wght@400;700&family=Montserrat:wght@400;700&family=Playfair+Display:wght@400;700&display=swap"
     rel="stylesheet"
   />
 
@@ -72,6 +72,10 @@
       gap: 0.5rem;
       overflow: auto;
       box-sizing: border-box;
+    }
+
+    .greeting {
+      margin-bottom: 1rem;
     }
 
     .right-panel {
@@ -211,6 +215,14 @@
             >
               Change Font Color
             </button>
+            <button
+              id="changeFontBtn"
+              type="button"
+              class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded"
+              disabled
+            >
+              Change Font
+            </button>
           </div>
         </div>
         
@@ -229,6 +241,7 @@
           <p id="imageCount">Images: 0</p>
           <p id="colorCount">Colors: 0</p>
           <p id="textColorCount">Text Colors: 0</p>
+          <p id="fontCount">Fonts: 5</p>
         </div>
       </div>
 
@@ -247,16 +260,20 @@
             <div id="logoBar" class="logo-bar" style="background-color: #1F2937; color: #fff;">
               <img id="logo" alt="Brand Logo" />
             </div>
-            <!-- Content area -->
+            <!-- Content area with updated typography -->
             <div id="contentArea" class="content-area" style="background-color: #1F2937; color: #fff;">
-              <h3 id="helloText" class="text-xl">
-                Hello, <span class="font-bold">Amanda!</span>
-              </h3>
-              <div>
+              <div class="greeting">
+                <div class="text-lg">Hello,</div>
+                <div class="text-2xl font-bold">Amanda!</div>
+              </div>
+              
+              <div class="mt-4">
                 <span>Shop Our Sale Today</span>
                 <br />
                 <span>Get up to <span class="font-bold">20% OFF</span></span>
-                <br />
+              </div>
+              
+              <div class="mt-4">
                 <span id="discountBox">Use code: DIRECTMAIL20</span>
               </div>
               
@@ -290,13 +307,23 @@
     // Base URL for the image proxy service
     const IMAGE_PROXY_BASE = 'https://images.weserv.nl/?url=';
     
+    // Define a list of fonts to cycle through
+    const fontOptions = [
+      "Merriweather, serif", 
+      "Roboto, sans-serif", 
+      "Lora, serif", 
+      "Montserrat, sans-serif",
+      "Playfair Display, serif"
+    ];
+    
     let allImages = [];
     let currentImageIndex = 0;
     let allColors = [];
     let currentColorIndex = 0;
     let textColorOptions = ["#FFFFFF", "#000000", "#333333"];
     let currentTextColorIndex = 0;
-    let primaryFont = "Merriweather"; // fallback
+    let currentFontIndex = 0;
+    let primaryFont = fontOptions[0]; // Default font
     
     // Store brand data globally to persist between customizations
     let brandData = {
@@ -310,6 +337,7 @@
       const anotherImageBtn = document.getElementById("anotherImageBtn");
       const anotherColorBtn = document.getElementById("anotherColorBtn");
       const changeFontColorBtn = document.getElementById("changeFontColorBtn");
+      const changeFontBtn = document.getElementById("changeFontBtn");
       const downloadBtn = document.getElementById("downloadButton");
       const loadingIndicator = document.getElementById("loadingIndicator");
       const statusIndicator = document.getElementById("statusIndicator");
@@ -319,6 +347,7 @@
       const imageCountEl = document.getElementById("imageCount");
       const colorCountEl = document.getElementById("colorCount");
       const textColorCountEl = document.getElementById("textColorCount");
+      const fontCountEl = document.getElementById("fontCount");
 
       // "Try Another Image" cycles through allImages (if >1).
       anotherImageBtn.addEventListener("click", () => {
@@ -330,7 +359,7 @@
         updatePostcard(brandData, currentImageIndex, currentColorIndex);
         showStatus(`Image ${currentImageIndex + 1}/${allImages.length}`);
         
-        // When image changes, we'll check if we need to extract colors from it
+        // When image changes, extract colors from it
         extractColorsFromCurrentImage();
       });
 
@@ -360,6 +389,14 @@
         updatePostcard(brandData, currentImageIndex, currentColorIndex);
         showStatus(`Text Color ${currentTextColorIndex + 1}/${textColorOptions.length}`);
       });
+      
+      // "Change Font" cycles through font options
+      changeFontBtn.addEventListener("click", () => {
+        currentFontIndex = (currentFontIndex + 1) % fontOptions.length;
+        primaryFont = fontOptions[currentFontIndex];
+        document.querySelector('.postcard').style.setProperty('--postcard-font', primaryFont);
+        showStatus(`Font: ${primaryFont.split(',')[0]}`);
+      });
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -378,6 +415,7 @@
         anotherImageBtn.disabled = true;
         anotherColorBtn.disabled = true;
         changeFontColorBtn.disabled = true;
+        changeFontBtn.disabled = true;
         downloadBtn.disabled = true;
 
         try {
@@ -398,10 +436,21 @@
           currentColorIndex = 0;
           textColorOptions = data.textColorOptions || ["#FFFFFF", "#000000", "#333333"];
           currentTextColorIndex = 0;
-          primaryFont = data.primaryFont || "Merriweather";
+          
+          // If backend returned a font, use it; otherwise keep our current font
+          if (data.primaryFont && data.primaryFont !== "Merriweather") {
+            primaryFont = data.primaryFont + ", " + fontOptions[currentFontIndex];
+          } else {
+            primaryFont = fontOptions[currentFontIndex];
+          }
 
           // Update postcard with the first image & color
           updatePostcard(data, 0, 0);
+          
+          // Extract colors from initial image (fix for "Try Another Color" button)
+          if (allImages.length > 0) {
+            extractColorsFromCurrentImage();
+          }
           
           // Update the counters
           updateCounters();
@@ -410,6 +459,7 @@
           anotherImageBtn.disabled = allImages.length <= 1;
           anotherColorBtn.disabled = allColors.length <= 1;
           changeFontColorBtn.disabled = textColorOptions.length <= 1;
+          changeFontBtn.disabled = false;
           downloadBtn.disabled = false;
           
           showStatus("Postcard generated successfully!");
@@ -438,11 +488,17 @@
           textColorOptions = fallbackData.textColorOptions || ["#FFFFFF", "#000000", "#333333"];
           currentTextColorIndex = 0;
           
+          // Extract colors from initial image
+          if (allImages.length > 0) {
+            extractColorsFromCurrentImage();
+          }
+          
           // Update counters and enable buttons
           updateCounters();
           anotherImageBtn.disabled = allImages.length <= 1;
           anotherColorBtn.disabled = allColors.length <= 1;
           changeFontColorBtn.disabled = textColorOptions.length <= 1;
+          changeFontBtn.disabled = false;
           downloadBtn.disabled = false;
         } finally {
           // Hide loading indicator
@@ -476,6 +532,7 @@
         imageCountEl.textContent = `Images: ${allImages.length}`;
         colorCountEl.textContent = `Colors: ${allColors.length}`;
         updateTextColorCount();
+        fontCountEl.textContent = `Fonts: ${fontOptions.length}`;
       }
       
       function updateTextColorCount() {
@@ -664,7 +721,7 @@
         brandName: brandName,
         brandDomain: domain,
         logoUrl: `https://logo.clearbit.com/${domain}`,
-        primaryFont: "Merriweather",
+        primaryFont: fontOptions[currentFontIndex],
         images: mockImages,
         colorSwatches: mockColorSwatches,
         activeColor: mockColorSwatches[0],
@@ -718,7 +775,7 @@
       document.getElementById("fallback").style.display = "none";
 
       // Apply the font only to the postcard
-      document.querySelector(".postcard").style.setProperty("--postcard-font", data.primaryFont);
+      document.querySelector(".postcard").style.setProperty("--postcard-font", primaryFont);
 
       // Update the top bar & content area
       const logoBar = document.getElementById("logoBar");

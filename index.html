@@ -78,7 +78,7 @@
       width: 60%;
       position: relative;
     }
-    #productImage {
+    #image {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -95,12 +95,7 @@
       display: inline-block;
     }
 
-    /* Make product name smaller */
-    #productName {
-      font-size: 0.9rem;
-    }
-
-    /* Fallback layout if no product data */
+    /* Fallback layout if no image data */
     #fallback {
       display: none;
       align-items: center;
@@ -185,12 +180,12 @@
           <h3 class="text-lg font-medium mb-2">Customize</h3>
           <div class="flex flex-wrap gap-2">
             <button
-              id="anotherProductBtn"
+              id="anotherImageBtn"
               type="button"
               class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded"
               disabled
             >
-              Try Another Product
+              Try Another Image
             </button>
             <button
               id="anotherColorBtn"
@@ -223,7 +218,7 @@
         
         <!-- Counts display -->
         <div class="mt-4 text-sm text-gray-600">
-          <p id="productCount">Products: 0</p>
+          <p id="imageCount">Images: 0</p>
           <p id="colorCount">Colors: 0</p>
           <p id="textColorCount">Text Colors: 0</p>
         </div>
@@ -256,26 +251,23 @@
                 <br />
                 <span id="discountBox">Use code: DIRECTMAIL20</span>
               </div>
-              <div class="mt-4">
-                <h3 id="productName" class="font-bold"></h3>
-                <p id="productPrice"></p>
-              </div>
+              
               <p id="brandURL" class="text-sm mt-6"></p>
             </div>
           </div>
 
-          <!-- Right panel: product image -->
+          <!-- Right panel: image -->
           <div class="right-panel">
             <img
-              id="productImage"
+              id="image"
               src=""
-              alt="Product Image"
+              alt="Featured Image"
               style="display: none;"
             />
           </div>
         </div>
 
-        <!-- Fallback layout if no product data -->
+        <!-- Fallback layout if no image data -->
         <div id="fallback" class="postcard" style="display: none;">
           <div id="fallbackContent">
             <h2 id="fallbackBrandName" class="text-3xl font-bold mb-4"></h2>
@@ -287,8 +279,8 @@
   </div>
 
   <script>
-    let allProducts = [];
-    let currentProductIndex = 0;
+    let allImages = [];
+    let currentImageIndex = 0;
     let allColors = [];
     let currentColorIndex = 0;
     let textColorOptions = ["#FFFFFF", "#000000", "#333333"];
@@ -297,7 +289,7 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       const form = document.getElementById("postcardForm");
-      const anotherProductBtn = document.getElementById("anotherProductBtn");
+      const anotherImageBtn = document.getElementById("anotherImageBtn");
       const anotherColorBtn = document.getElementById("anotherColorBtn");
       const changeFontColorBtn = document.getElementById("changeFontColorBtn");
       const downloadBtn = document.getElementById("downloadButton");
@@ -305,19 +297,22 @@
       const statusIndicator = document.getElementById("statusIndicator");
       
       // Counter elements
-      const productCountEl = document.getElementById("productCount");
+      const imageCountEl = document.getElementById("imageCount");
       const colorCountEl = document.getElementById("colorCount");
       const textColorCountEl = document.getElementById("textColorCount");
 
-      // "Try Another Product" cycles through allProducts (if >1).
-      anotherProductBtn.addEventListener("click", () => {
-        if (allProducts.length < 2) {
-          showStatus("No additional products available");
+      // "Try Another Image" cycles through allImages (if >1).
+      anotherImageBtn.addEventListener("click", () => {
+        if (allImages.length < 2) {
+          showStatus("No additional images available");
           return;
         }
-        currentProductIndex = (currentProductIndex + 1) % allProducts.length;
-        updatePostcard(null, currentProductIndex, currentColorIndex);
-        showStatus(`Product ${currentProductIndex + 1}/${allProducts.length}`);
+        currentImageIndex = (currentImageIndex + 1) % allImages.length;
+        updatePostcard(null, currentImageIndex, currentColorIndex);
+        showStatus(`Image ${currentImageIndex + 1}/${allImages.length}`);
+        
+        // When image changes, we'll check if we need to extract colors from it
+        extractColorsFromCurrentImage();
       });
 
       // "Try Another Color" cycles through allColors (if >1).
@@ -327,20 +322,13 @@
           return;
         }
         currentColorIndex = (currentColorIndex + 1) % allColors.length;
-        updatePostcard(null, currentProductIndex, currentColorIndex);
+        updatePostcard(null, currentImageIndex, currentColorIndex);
         showStatus(`Color ${currentColorIndex + 1}/${allColors.length}`);
         
-        // When color changes, also generate new text color options from the image
-        if (allProducts[currentProductIndex] && allProducts[currentProductIndex].productImageUrl) {
-          generateColorsFromImage(allProducts[currentProductIndex].productImageUrl)
-            .then(colors => {
-              if (colors && colors.length > 0) {
-                textColorOptions = getTextColorOptions(allColors[currentColorIndex]);
-                updateTextColorCount();
-              }
-            })
-            .catch(err => console.error("Error getting new text colors:", err));
-        }
+        // When color changes, generate new text color options
+        textColorOptions = getTextColorOptions(allColors[currentColorIndex]);
+        currentTextColorIndex = 0; // Reset to first text color option
+        updateTextColorCount();
       });
       
       // "Change Font Color" cycles through textColorOptions
@@ -350,7 +338,7 @@
           return;
         }
         currentTextColorIndex = (currentTextColorIndex + 1) % textColorOptions.length;
-        updatePostcard(null, currentProductIndex, currentColorIndex);
+        updatePostcard(null, currentImageIndex, currentColorIndex);
         showStatus(`Text Color ${currentTextColorIndex + 1}/${textColorOptions.length}`);
       });
 
@@ -364,7 +352,7 @@
         loadingIndicator.classList.add("flex");
         
         // Disable buttons during processing
-        anotherProductBtn.disabled = true;
+        anotherImageBtn.disabled = true;
         anotherColorBtn.disabled = true;
         changeFontColorBtn.disabled = true;
         downloadBtn.disabled = true;
@@ -374,22 +362,22 @@
           console.log("Scraped Data:", data);
 
           // Store relevant arrays
-          allProducts = data.products || [];
-          currentProductIndex = 0;
+          allImages = data.images || [];
+          currentImageIndex = 0;
           allColors = data.colorSwatches || [];
           currentColorIndex = 0;
           textColorOptions = data.textColorOptions || ["#FFFFFF", "#000000", "#333333"];
           currentTextColorIndex = 0;
           primaryFont = data.primaryFont || "Merriweather";
 
-          // Update postcard with the first product & color
+          // Update postcard with the first image & color
           updatePostcard(data, 0, 0);
           
           // Update the counters
           updateCounters();
           
           // Enable buttons if we have multiple options
-          anotherProductBtn.disabled = allProducts.length <= 1;
+          anotherImageBtn.disabled = allImages.length <= 1;
           anotherColorBtn.disabled = allColors.length <= 1;
           changeFontColorBtn.disabled = textColorOptions.length <= 1;
           downloadBtn.disabled = false;
@@ -424,7 +412,7 @@
       
       // Helper function to update counters
       function updateCounters() {
-        productCountEl.textContent = `Products: ${allProducts.length}`;
+        imageCountEl.textContent = `Images: ${allImages.length}`;
         colorCountEl.textContent = `Colors: ${allColors.length}`;
         updateTextColorCount();
       }
@@ -443,10 +431,42 @@
         }, duration);
       }
       
+      // Helper to extract colors from current image
+      function extractColorsFromCurrentImage() {
+        if (allImages.length > 0 && allImages[currentImageIndex]) {
+          const currentImageUrl = allImages[currentImageIndex];
+          
+          // Extract colors from the current image
+          generateColorsFromImage(currentImageUrl)
+            .then(newColors => {
+              if (newColors && newColors.length > 0) {
+                // Add these colors to the existing colors (keeping theme colors first)
+                const themeColors = allColors.slice(0, Math.min(3, allColors.length));
+                const combinedColors = [...themeColors];
+                
+                // Add new colors if they don't already exist
+                for (const color of newColors) {
+                  if (!combinedColors.includes(color)) {
+                    combinedColors.push(color);
+                  }
+                }
+                
+                // Update allColors with the combined set
+                allColors = combinedColors;
+                updateCounters();
+                
+                // Enable the color button if we now have multiple colors
+                anotherColorBtn.disabled = allColors.length <= 1;
+              }
+            })
+            .catch(err => console.error("Error extracting colors from image:", err));
+        }
+      }
+      
       // Helper to generate colors from an image
       async function generateColorsFromImage(imageUrl) {
         try {
-          // Use the product image to get new colors
+          // Use the image to get new colors
           // This is a client-side approach that mimics what the server does
           const img = new Image();
           img.crossOrigin = "Anonymous";
@@ -545,23 +565,11 @@
         .replace(/-/g, ' ')
         .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
       
-      // Generate multiple mock products
-      const mockProducts = [
-        {
-          productName: `${brandName} Premium Product`,
-          productPrice: "$59.99",
-          productImageUrl: `https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}+Product+1`
-        },
-        {
-          productName: `${brandName} Featured Item`,
-          productPrice: "$49.99",
-          productImageUrl: `https://placehold.co/800x600/e74c3c/ffffff?text=${encodeURIComponent(brandName)}+Product+2`
-        },
-        {
-          productName: `${brandName} Special Collection`,
-          productPrice: "$79.99",
-          productImageUrl: `https://placehold.co/800x600/2ecc71/ffffff?text=${encodeURIComponent(brandName)}+Product+3`
-        }
+      // Generate multiple mock images
+      const mockImages = [
+        `https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}+Image+1`,
+        `https://placehold.co/800x600/e74c3c/ffffff?text=${encodeURIComponent(brandName)}+Image+2`,
+        `https://placehold.co/800x600/2ecc71/ffffff?text=${encodeURIComponent(brandName)}+Image+3`
       ];
       
       // Mock color swatches
@@ -575,10 +583,7 @@
         brandDomain: domain,
         logoUrl: `https://logo.clearbit.com/${domain}`,
         primaryFont: "Merriweather",
-        products: mockProducts,
-        productName: mockProducts[0].productName,
-        productPrice: mockProducts[0].productPrice,
-        productImageUrl: mockProducts[0].productImageUrl,
+        images: mockImages,
         colorSwatches: mockColorSwatches,
         activeColor: mockColorSwatches[0],
         textColorOptions: mockTextColorOptions
@@ -586,13 +591,13 @@
     }
 
     // Update the postcard UI
-    function updatePostcard(fullData, productIdx, colorIdx) {
+    function updatePostcard(fullData, imageIdx, colorIdx) {
       // If we got fresh data from the server, use it. Otherwise, rely on stored arrays.
       let data = fullData;
       if (!data) {
         data = {
           primaryFont,
-          products: allProducts,
+          images: allImages,
           colorSwatches: allColors,
           textColorOptions: textColorOptions,
           brandName: "",
@@ -607,11 +612,8 @@
         }
       }
 
-      // Merge "active" product into data
-      const activeProduct = allProducts[productIdx] || {};
-      data.productName = activeProduct.productName || "";
-      data.productPrice = activeProduct.productPrice || "";
-      data.productImageUrl = activeProduct.productImageUrl || "";
+      // Get the current image
+      const currentImageUrl = allImages[imageIdx] || "";
 
       // Active color
       const color = allColors[colorIdx] || "#1F2937";
@@ -619,8 +621,8 @@
       // Active text color
       const textColor = textColorOptions[currentTextColorIndex] || "#FFFFFF";
 
-      // If no product data, show fallback
-      if (!data.productName && !data.productImageUrl) {
+      // If no image data, show fallback
+      if (!currentImageUrl) {
         document.getElementById("postcard").style.display = "none";
         const fallback = document.getElementById("fallback");
         fallback.style.display = "flex";
@@ -647,7 +649,7 @@
       contentArea.style.color = textColor;
       document.getElementById("discountBox").style.borderColor = textColor;
 
-      // Logo
+      // Logo - important fix for the disappearing logo issue
       const logoEl = document.getElementById("logo");
       if (data.logoUrl) {
         logoEl.src = data.logoUrl;
@@ -656,21 +658,13 @@
         logoEl.style.display = "none";
       }
 
-      // Product name & price
-      document.getElementById("productName").textContent = data.productName;
-      document.getElementById("productPrice").textContent = data.productPrice;
-
       // Domain near bottom
       document.getElementById("brandURL").textContent = data.brandDomain || "";
 
-      // Product image
-      const productImage = document.getElementById("productImage");
-      if (data.productImageUrl) {
-        productImage.src = data.productImageUrl;
-        productImage.style.display = "block";
-      } else {
-        productImage.style.display = "none";
-      }
+      // Image
+      const imageEl = document.getElementById("image");
+      imageEl.src = currentImageUrl;
+      imageEl.style.display = "block";
     }
 
     // Generate text color options based on background color
@@ -689,13 +683,13 @@
       
       // Add contrast color based on luminance
       if (luminance > 128) {
-        // Dark background needs light text
-        textColors.push("#F3F4F6"); // Light gray
-        textColors.push("#E5E7EB"); // Lighter gray
-      } else {
         // Light background needs dark text
         textColors.push("#4B5563"); // Medium gray
         textColors.push("#6B7280"); // Light gray
+      } else {
+        // Dark background needs light text
+        textColors.push("#F3F4F6"); // Light gray
+        textColors.push("#E5E7EB"); // Lighter gray
       }
       
       // Add a complementary color

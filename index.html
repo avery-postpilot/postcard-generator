@@ -402,7 +402,7 @@
         // Hide the status indicator before capturing
         statusIndicator.style.display = "none";
         
-        html2canvas(target).then((canvas) => {
+        html2canvas(target, { willReadFrequently: true }).then((canvas) => {
           const link = document.createElement("a");
           link.download = "postcard.png";
           link.href = canvas.toDataURL();
@@ -477,7 +477,7 @@
               try {
                 // Create a canvas to analyze the image
                 const canvas = document.createElement("canvas");
-                const ctx = canvas.getContext("2d");
+                const ctx = canvas.getContext("2d", { willReadFrequently: true });
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
@@ -530,7 +530,8 @@
     async function scrapeData(url) {
       try {
         // Try to use the Netlify function (for production)
-        const res = await fetch("/.netlify/functions/old_scrape", {
+        // Update: Changed from old_scrape to scrape
+        const res = await fetch("/.netlify/functions/scrape", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url })
@@ -565,11 +566,11 @@
         .replace(/-/g, ' ')
         .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
       
-      // Generate multiple mock images
+      // Generate multiple mock images with proxied URLs to avoid CORS issues
       const mockImages = [
-        `https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}+Image+1`,
-        `https://placehold.co/800x600/e74c3c/ffffff?text=${encodeURIComponent(brandName)}+Image+2`,
-        `https://placehold.co/800x600/2ecc71/ffffff?text=${encodeURIComponent(brandName)}+Image+3`
+        `https://images.weserv.nl/?url=${encodeURIComponent(`https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}+Image+1`)}`,
+        `https://images.weserv.nl/?url=${encodeURIComponent(`https://placehold.co/800x600/e74c3c/ffffff?text=${encodeURIComponent(brandName)}+Image+2`)}`,
+        `https://images.weserv.nl/?url=${encodeURIComponent(`https://placehold.co/800x600/2ecc71/ffffff?text=${encodeURIComponent(brandName)}+Image+3`)}`
       ];
       
       // Mock color swatches
@@ -652,8 +653,20 @@
       // Logo - important fix for the disappearing logo issue
       const logoEl = document.getElementById("logo");
       if (data.logoUrl) {
-        logoEl.src = data.logoUrl;
+        // Use a proxy to avoid CORS issues
+        const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(data.logoUrl)}`;
+        logoEl.src = proxyUrl;
         logoEl.style.display = "block";
+        
+        // Fallback if the proxy fails
+        logoEl.onerror = () => {
+          logoEl.src = data.logoUrl;
+          
+          // If both fail, hide the logo
+          logoEl.onerror = () => {
+            logoEl.style.display = "none";
+          };
+        };
       } else {
         logoEl.style.display = "none";
       }
@@ -661,10 +674,21 @@
       // Domain near bottom
       document.getElementById("brandURL").textContent = data.brandDomain || "";
 
-      // Image
+      // Image - Use image proxy to avoid CORS issues
       const imageEl = document.getElementById("image");
-      imageEl.src = currentImageUrl;
+      const proxyImageUrl = `https://images.weserv.nl/?url=${encodeURIComponent(currentImageUrl)}`;
+      imageEl.src = proxyImageUrl;
       imageEl.style.display = "block";
+      
+      // Fallback if the proxy fails
+      imageEl.onerror = () => {
+        imageEl.src = currentImageUrl;
+        
+        // If direct loading also fails, try a placeholder
+        imageEl.onerror = () => {
+          imageEl.src = `https://placehold.co/800x600/3498db/ffffff?text=Image+Not+Available`;
+        };
+      };
     }
 
     // Generate text color options based on background color

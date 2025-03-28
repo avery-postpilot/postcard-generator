@@ -8,9 +8,13 @@
   status = 200
 
 [functions]
-  node_bundler = "esbuild"
-  external_node_modules = ["cheerio", "node-vibrant"]
-
+  external_node_modules = [
+    "cheerio",
+    "node-vibrant",
+    "puppeteer-core",
+    "chrome-aws-lambda"
+  ]
+  
 [dev]
   functions = "netlify/functions"
   functionsPort = 8888

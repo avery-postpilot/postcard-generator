@@ -136,6 +136,13 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    
+    /* Error message */
+    .error-message {
+      color: #e53e3e;
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+    }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -159,6 +166,7 @@
               class="w-full border border-gray-300 p-2 rounded"
               required
             />
+            <div id="errorMessage" class="error-message hidden"></div>
           </div>
           <div class="flex flex-wrap gap-2">
             <button
@@ -279,6 +287,9 @@
   </div>
 
   <script>
+    // Base URL for the image proxy service
+    const IMAGE_PROXY_BASE = 'https://images.weserv.nl/?url=';
+    
     let allImages = [];
     let currentImageIndex = 0;
     let allColors = [];
@@ -295,6 +306,7 @@
       const downloadBtn = document.getElementById("downloadButton");
       const loadingIndicator = document.getElementById("loadingIndicator");
       const statusIndicator = document.getElementById("statusIndicator");
+      const errorMessage = document.getElementById("errorMessage");
       
       // Counter elements
       const imageCountEl = document.getElementById("imageCount");
@@ -347,6 +359,10 @@
         const url = document.getElementById("websiteUrl").value.trim();
         if (!url) return alert("Please enter a URL.");
 
+        // Hide any previous error message
+        errorMessage.classList.add("hidden");
+        errorMessage.textContent = "";
+
         // Show loading indicator
         loadingIndicator.classList.remove("hidden");
         loadingIndicator.classList.add("flex");
@@ -384,8 +400,28 @@
           
           showStatus("Postcard generated successfully!");
         } catch (err) {
-          console.error(err);
-          alert("Scraping failed. Check console for details.");
+          console.error("Error generating postcard:", err);
+          // Show error message to user
+          errorMessage.textContent = `Error: ${err.message || "Failed to generate postcard. Please try again."}`;
+          errorMessage.classList.remove("hidden");
+          // Use fallback data
+          const fallbackData = fallbackExtraction(url);
+          updatePostcard(fallbackData, 0, 0);
+          
+          // Store relevant arrays from fallback
+          allImages = fallbackData.images || [];
+          currentImageIndex = 0;
+          allColors = fallbackData.colorSwatches || [];
+          currentColorIndex = 0;
+          textColorOptions = fallbackData.textColorOptions || ["#FFFFFF", "#000000", "#333333"];
+          currentTextColorIndex = 0;
+          
+          // Update counters and enable buttons
+          updateCounters();
+          anotherImageBtn.disabled = allImages.length <= 1;
+          anotherColorBtn.disabled = allColors.length <= 1;
+          changeFontColorBtn.disabled = textColorOptions.length <= 1;
+          downloadBtn.disabled = false;
         } finally {
           // Hide loading indicator
           loadingIndicator.classList.add("hidden");
@@ -407,6 +443,9 @@
           link.download = "postcard.png";
           link.href = canvas.toDataURL();
           link.click();
+        }).catch(err => {
+          console.error("Error generating image:", err);
+          alert("There was an error generating the image. Please try again.");
         });
       });
       
@@ -467,7 +506,7 @@
       async function generateColorsFromImage(imageUrl) {
         try {
           // Use the image to get new colors
-          // This is a client-side approach that mimics what the server does
+          // This is a client-side approach to extract colors from an image
           const img = new Image();
           img.crossOrigin = "Anonymous";
           
@@ -511,7 +550,10 @@
               reject(new Error("Failed to load image for color extraction"));
             };
             
-            img.src = imageUrl;
+            // Use image proxy to avoid CORS issues
+            img.src = imageUrl.startsWith('http') ? 
+              `${IMAGE_PROXY_BASE}${encodeURIComponent(imageUrl)}` : 
+              imageUrl;
           });
         } catch (err) {
           console.error("Error generating colors from image:", err);
@@ -529,23 +571,40 @@
     // Call the Netlify function to scrape data
     async function scrapeData(url) {
       try {
-        // Try to use the Netlify function (for production)
-        // Update: Changed from old_scrape to scrape
-        const res = await fetch("/.netlify/functions/scrape", {
+        // First, try the new scrape endpoint
+        let res = await fetch("/.netlify/functions/scrape", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url })
         });
         
         if (!res.ok) {
-          throw new Error(`Scrape failed: ${res.status}`);
+          console.warn(`Error from scrape endpoint: ${res.status}. Trying old_scrape endpoint as fallback.`);
+          
+          // If that fails, try the old endpoint
+          res = await fetch("/.netlify/functions/old_scrape", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url })
+          });
+          
+          if (!res.ok) {
+            throw new Error(`Both scrape endpoints failed. Status: ${res.status}`);
+          }
         }
         
-        return await res.json();
+        const data = await res.json();
+        
+        // Check if the response contains an error
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        
+        return data;
       } catch (fetchError) {
         console.warn("Netlify function error:", fetchError);
         
-        // Fallback extraction for local development or if the function fails
+        // Use fallback extraction
         return fallbackExtraction(url);
       }
     }
@@ -566,11 +625,11 @@
         .replace(/-/g, ' ')
         .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
       
-      // Generate multiple mock images with proxied URLs to avoid CORS issues
+      // Generate direct mock images that don't rely on proxy
       const mockImages = [
-        `https://images.weserv.nl/?url=${encodeURIComponent(`https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}+Image+1`)}`,
-        `https://images.weserv.nl/?url=${encodeURIComponent(`https://placehold.co/800x600/e74c3c/ffffff?text=${encodeURIComponent(brandName)}+Image+2`)}`,
-        `https://images.weserv.nl/?url=${encodeURIComponent(`https://placehold.co/800x600/2ecc71/ffffff?text=${encodeURIComponent(brandName)}+Image+3`)}`
+        `https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}+Image+1`,
+        `https://placehold.co/800x600/e74c3c/ffffff?text=${encodeURIComponent(brandName)}+Image+2`,
+        `https://placehold.co/800x600/2ecc71/ffffff?text=${encodeURIComponent(brandName)}+Image+3`
       ];
       
       // Mock color swatches
@@ -653,20 +712,27 @@
       // Logo - important fix for the disappearing logo issue
       const logoEl = document.getElementById("logo");
       if (data.logoUrl) {
-        // Use a proxy to avoid CORS issues
-        const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(data.logoUrl)}`;
-        logoEl.src = proxyUrl;
-        logoEl.style.display = "block";
-        
-        // Fallback if the proxy fails
+        // First try direct logo loading
         logoEl.onerror = () => {
-          logoEl.src = data.logoUrl;
+          // If direct loading fails, try with proxy
+          const proxyUrl = `${IMAGE_PROXY_BASE}${encodeURIComponent(data.logoUrl)}`;
+          logoEl.src = proxyUrl;
           
-          // If both fail, hide the logo
+          // If both fail, use a generated logo placeholder
           logoEl.onerror = () => {
-            logoEl.style.display = "none";
+            // Create a placeholder with the first letter of the brand name
+            logoEl.src = `https://placehold.co/200x200/1F2937/FFFFFF?text=${data.brandName ? data.brandName[0].toUpperCase() : 'L'}`;
+            
+            // Last resort fallback
+            logoEl.onerror = () => {
+              logoEl.style.display = "none";
+            };
           };
         };
+        
+        // Start with direct loading attempt
+        logoEl.src = data.logoUrl;
+        logoEl.style.display = "block";
       } else {
         logoEl.style.display = "none";
       }
@@ -674,21 +740,25 @@
       // Domain near bottom
       document.getElementById("brandURL").textContent = data.brandDomain || "";
 
-      // Image - Use image proxy to avoid CORS issues
+      // Image
       const imageEl = document.getElementById("image");
-      const proxyImageUrl = `https://images.weserv.nl/?url=${encodeURIComponent(currentImageUrl)}`;
-      imageEl.src = proxyImageUrl;
-      imageEl.style.display = "block";
       
-      // Fallback if the proxy fails
+      // First try direct image loading
       imageEl.onerror = () => {
-        imageEl.src = currentImageUrl;
+        // If direct loading fails, try with proxy
+        const proxyImageUrl = `${IMAGE_PROXY_BASE}${encodeURIComponent(currentImageUrl)}`;
+        imageEl.src = proxyImageUrl;
         
-        // If direct loading also fails, try a placeholder
+        // If proxy also fails, use placeholder
         imageEl.onerror = () => {
-          imageEl.src = `https://placehold.co/800x600/3498db/ffffff?text=Image+Not+Available`;
+          const brandName = data.brandName || "Image";
+          imageEl.src = `https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}`;
         };
       };
+      
+      // Start with direct loading attempt
+      imageEl.src = currentImageUrl;
+      imageEl.style.display = "block";
     }
 
     // Generate text color options based on background color

@@ -3,13 +3,15 @@
   "version": "1.0.0",
   "description": "Postcard generator tool for Shopify stores (scrapes publicly available data)",
   "scripts": {
-    "start": "netlify dev"
+    "start": "netlify dev",
+    "build": "echo 'No build step required'",
+    "install-deps": "npm install --force"
   },
   "dependencies": {
     "axios": "^0.27.2",
     "cheerio": "^1.0.0-rc.12",
     "node-vibrant": "^4.0.2",
-    "puppeteer-core": "^24.4.0",
+    "puppeteer-core": "^10.1.0",
     "chrome-aws-lambda": "^10.1.0"
   }
 }

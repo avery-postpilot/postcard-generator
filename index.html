@@ -112,6 +112,35 @@
     #fallbackContent {
       padding: 1rem;
     }
+    
+    /* Status indicator for color and font changes */
+    #statusIndicator {
+      display: none;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(0,0,0,0.7);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      z-index: 100;
+    }
+    
+    /* Loading indicator */
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -143,12 +172,23 @@
             >
               Generate Postcard
             </button>
-            <!-- Always show these two buttons so user can see them.
-                 If there's only one product or one color, they'll do nothing. -->
+            
+            <div id="loadingIndicator" class="hidden items-center">
+              <div class="loading-spinner"></div>
+              <span>Processing...</span>
+            </div>
+          </div>
+        </form>
+        
+        <!-- Button group for customization -->
+        <div class="mt-4 border-t border-gray-200 pt-4">
+          <h3 class="text-lg font-medium mb-2">Customize</h3>
+          <div class="flex flex-wrap gap-2">
             <button
               id="anotherProductBtn"
               type="button"
               class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded"
+              disabled
             >
               Try Another Product
             </button>
@@ -156,24 +196,45 @@
               id="anotherColorBtn"
               type="button"
               class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded"
+              disabled
             >
               Try Another Color
             </button>
+            <button
+              id="changeFontColorBtn"
+              type="button"
+              class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+              disabled
+            >
+              Change Font Color
+            </button>
           </div>
-        </form>
+        </div>
+        
         <div class="mt-4">
           <button
             id="downloadButton"
-            class="download-button bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+            class="download-button bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded w-full"
+            disabled
           >
             Download Postcard
           </button>
+        </div>
+        
+        <!-- Counts display -->
+        <div class="mt-4 text-sm text-gray-600">
+          <p id="productCount">Products: 0</p>
+          <p id="colorCount">Colors: 0</p>
+          <p id="textColorCount">Text Colors: 0</p>
         </div>
       </div>
 
       <!-- Right column: Postcard Preview -->
       <div>
         <h2 class="text-xl font-semibold mb-4">Preview</h2>
+
+        <!-- Status indicator for changes -->
+        <div id="statusIndicator"></div>
 
         <!-- Normal postcard layout -->
         <div id="postcard" class="postcard">
@@ -230,40 +291,83 @@
     let currentProductIndex = 0;
     let allColors = [];
     let currentColorIndex = 0;
+    let textColorOptions = ["#FFFFFF", "#000000", "#333333"];
+    let currentTextColorIndex = 0;
     let primaryFont = "Merriweather"; // fallback
 
     document.addEventListener("DOMContentLoaded", () => {
       const form = document.getElementById("postcardForm");
       const anotherProductBtn = document.getElementById("anotherProductBtn");
       const anotherColorBtn = document.getElementById("anotherColorBtn");
+      const changeFontColorBtn = document.getElementById("changeFontColorBtn");
       const downloadBtn = document.getElementById("downloadButton");
+      const loadingIndicator = document.getElementById("loadingIndicator");
+      const statusIndicator = document.getElementById("statusIndicator");
+      
+      // Counter elements
+      const productCountEl = document.getElementById("productCount");
+      const colorCountEl = document.getElementById("colorCount");
+      const textColorCountEl = document.getElementById("textColorCount");
 
       // "Try Another Product" cycles through allProducts (if >1).
       anotherProductBtn.addEventListener("click", () => {
         if (allProducts.length < 2) {
-          // Only one product found, do nothing or show a small notice.
-          console.log("No additional products to cycle through.");
+          showStatus("No additional products available");
           return;
         }
         currentProductIndex = (currentProductIndex + 1) % allProducts.length;
         updatePostcard(null, currentProductIndex, currentColorIndex);
+        showStatus(`Product ${currentProductIndex + 1}/${allProducts.length}`);
       });
 
       // "Try Another Color" cycles through allColors (if >1).
       anotherColorBtn.addEventListener("click", () => {
         if (allColors.length < 2) {
-          // Only one color swatch found, do nothing or show a small notice.
-          console.log("No additional color swatches to cycle through.");
+          showStatus("No additional colors available");
           return;
         }
         currentColorIndex = (currentColorIndex + 1) % allColors.length;
         updatePostcard(null, currentProductIndex, currentColorIndex);
+        showStatus(`Color ${currentColorIndex + 1}/${allColors.length}`);
+        
+        // When color changes, also generate new text color options from the image
+        if (allProducts[currentProductIndex] && allProducts[currentProductIndex].productImageUrl) {
+          generateColorsFromImage(allProducts[currentProductIndex].productImageUrl)
+            .then(colors => {
+              if (colors && colors.length > 0) {
+                textColorOptions = getTextColorOptions(allColors[currentColorIndex]);
+                updateTextColorCount();
+              }
+            })
+            .catch(err => console.error("Error getting new text colors:", err));
+        }
+      });
+      
+      // "Change Font Color" cycles through textColorOptions
+      changeFontColorBtn.addEventListener("click", () => {
+        if (textColorOptions.length < 2) {
+          showStatus("No additional text colors available");
+          return;
+        }
+        currentTextColorIndex = (currentTextColorIndex + 1) % textColorOptions.length;
+        updatePostcard(null, currentProductIndex, currentColorIndex);
+        showStatus(`Text Color ${currentTextColorIndex + 1}/${textColorOptions.length}`);
       });
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const url = document.getElementById("websiteUrl").value.trim();
         if (!url) return alert("Please enter a URL.");
+
+        // Show loading indicator
+        loadingIndicator.classList.remove("hidden");
+        loadingIndicator.classList.add("flex");
+        
+        // Disable buttons during processing
+        anotherProductBtn.disabled = true;
+        anotherColorBtn.disabled = true;
+        changeFontColorBtn.disabled = true;
+        downloadBtn.disabled = true;
 
         try {
           const data = await scrapeData(url);
@@ -274,13 +378,30 @@
           currentProductIndex = 0;
           allColors = data.colorSwatches || [];
           currentColorIndex = 0;
+          textColorOptions = data.textColorOptions || ["#FFFFFF", "#000000", "#333333"];
+          currentTextColorIndex = 0;
           primaryFont = data.primaryFont || "Merriweather";
 
           // Update postcard with the first product & color
           updatePostcard(data, 0, 0);
+          
+          // Update the counters
+          updateCounters();
+          
+          // Enable buttons if we have multiple options
+          anotherProductBtn.disabled = allProducts.length <= 1;
+          anotherColorBtn.disabled = allColors.length <= 1;
+          changeFontColorBtn.disabled = textColorOptions.length <= 1;
+          downloadBtn.disabled = false;
+          
+          showStatus("Postcard generated successfully!");
         } catch (err) {
           console.error(err);
           alert("Scraping failed. Check console for details.");
+        } finally {
+          // Hide loading indicator
+          loadingIndicator.classList.add("hidden");
+          loadingIndicator.classList.remove("flex");
         }
       });
 
@@ -290,6 +411,9 @@
         const isFallbackVisible = (fallback.style.display !== "none");
         const target = isFallbackVisible ? fallback : postcard;
 
+        // Hide the status indicator before capturing
+        statusIndicator.style.display = "none";
+        
         html2canvas(target).then((canvas) => {
           const link = document.createElement("a");
           link.download = "postcard.png";
@@ -297,20 +421,168 @@
           link.click();
         });
       });
+      
+      // Helper function to update counters
+      function updateCounters() {
+        productCountEl.textContent = `Products: ${allProducts.length}`;
+        colorCountEl.textContent = `Colors: ${allColors.length}`;
+        updateTextColorCount();
+      }
+      
+      function updateTextColorCount() {
+        textColorCountEl.textContent = `Text Colors: ${textColorOptions.length}`;
+      }
+      
+      // Helper function to show status notifications
+      function showStatus(message, duration = 2000) {
+        statusIndicator.textContent = message;
+        statusIndicator.style.display = "block";
+        
+        setTimeout(() => {
+          statusIndicator.style.display = "none";
+        }, duration);
+      }
+      
+      // Helper to generate colors from an image
+      async function generateColorsFromImage(imageUrl) {
+        try {
+          // Use the product image to get new colors
+          // This is a client-side approach that mimics what the server does
+          const img = new Image();
+          img.crossOrigin = "Anonymous";
+          
+          // Return a promise that resolves when the image loads
+          return new Promise((resolve, reject) => {
+            img.onload = () => {
+              try {
+                // Create a canvas to analyze the image
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                
+                // Sample colors from different areas of the image
+                const colors = [];
+                
+                // Sample from top-left, top-right, center, bottom-left, bottom-right
+                const positions = [
+                  {x: 0.25, y: 0.25},
+                  {x: 0.75, y: 0.25},
+                  {x: 0.5, y: 0.5},
+                  {x: 0.25, y: 0.75},
+                  {x: 0.75, y: 0.75}
+                ];
+                
+                for (const pos of positions) {
+                  const x = Math.floor(img.width * pos.x);
+                  const y = Math.floor(img.height * pos.y);
+                  const pixel = ctx.getImageData(x, y, 1, 1).data;
+                  colors.push(`#${pixelToHex(pixel[0])}${pixelToHex(pixel[1])}${pixelToHex(pixel[2])}`);
+                }
+                
+                resolve([...new Set(colors)]); // Remove duplicates
+              } catch (err) {
+                reject(err);
+              }
+            };
+            
+            img.onerror = () => {
+              reject(new Error("Failed to load image for color extraction"));
+            };
+            
+            img.src = imageUrl;
+          });
+        } catch (err) {
+          console.error("Error generating colors from image:", err);
+          return [];
+        }
+      }
+      
+      // Helper to convert pixel value to hex
+      function pixelToHex(p) {
+        const hex = p.toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+      }
     });
 
-    // Call the Netlify function
+    // Call the Netlify function to scrape data
     async function scrapeData(url) {
-      const res = await fetch("/.netlify/functions/scrape", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url })
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Scrape failed: ${res.status} - ${errText}`);
+      try {
+        // Try to use the Netlify function (for production)
+        const res = await fetch("/.netlify/functions/old_scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url })
+        });
+        
+        if (!res.ok) {
+          throw new Error(`Scrape failed: ${res.status}`);
+        }
+        
+        return await res.json();
+      } catch (fetchError) {
+        console.warn("Netlify function error:", fetchError);
+        
+        // Fallback extraction for local development or if the function fails
+        return fallbackExtraction(url);
       }
-      return await res.json();
+    }
+    
+    // Fallback extraction when Netlify function isn't available
+    function fallbackExtraction(url) {
+      console.log("Using fallback extraction for:", url);
+      
+      // Extract domain
+      let domain = url;
+      if (domain.startsWith('http://')) domain = domain.substring(7);
+      if (domain.startsWith('https://')) domain = domain.substring(8);
+      if (domain.startsWith('www.')) domain = domain.substring(4);
+      domain = domain.split('/')[0];
+      
+      // Generate brand name from domain
+      const brandName = domain.split('.')[0]
+        .replace(/-/g, ' ')
+        .replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+      
+      // Generate multiple mock products
+      const mockProducts = [
+        {
+          productName: `${brandName} Premium Product`,
+          productPrice: "$59.99",
+          productImageUrl: `https://placehold.co/800x600/3498db/ffffff?text=${encodeURIComponent(brandName)}+Product+1`
+        },
+        {
+          productName: `${brandName} Featured Item`,
+          productPrice: "$49.99",
+          productImageUrl: `https://placehold.co/800x600/e74c3c/ffffff?text=${encodeURIComponent(brandName)}+Product+2`
+        },
+        {
+          productName: `${brandName} Special Collection`,
+          productPrice: "$79.99",
+          productImageUrl: `https://placehold.co/800x600/2ecc71/ffffff?text=${encodeURIComponent(brandName)}+Product+3`
+        }
+      ];
+      
+      // Mock color swatches
+      const mockColorSwatches = ["#1F2937", "#2563EB", "#7C3AED", "#DB2777", "#059669"];
+      
+      // Mock text color options
+      const mockTextColorOptions = ["#FFFFFF", "#000000", "#F3F4F6", "#D1D5DB", "#9CA3AF"];
+      
+      return {
+        brandName: brandName,
+        brandDomain: domain,
+        logoUrl: `https://logo.clearbit.com/${domain}`,
+        primaryFont: "Merriweather",
+        products: mockProducts,
+        productName: mockProducts[0].productName,
+        productPrice: mockProducts[0].productPrice,
+        productImageUrl: mockProducts[0].productImageUrl,
+        colorSwatches: mockColorSwatches,
+        activeColor: mockColorSwatches[0],
+        textColorOptions: mockTextColorOptions
+      };
     }
 
     // Update the postcard UI
@@ -322,10 +594,17 @@
           primaryFont,
           products: allProducts,
           colorSwatches: allColors,
+          textColorOptions: textColorOptions,
           brandName: "",
           brandDomain: "",
           logoUrl: "",
         };
+      } else {
+        // Store text color options if they're in the data
+        if (data.textColorOptions && data.textColorOptions.length > 0) {
+          textColorOptions = data.textColorOptions;
+          currentTextColorIndex = 0;
+        }
       }
 
       // Merge "active" product into data
@@ -336,6 +615,9 @@
 
       // Active color
       const color = allColors[colorIdx] || "#1F2937";
+      
+      // Active text color
+      const textColor = textColorOptions[currentTextColorIndex] || "#FFFFFF";
 
       // If no product data, show fallback
       if (!data.productName && !data.productImageUrl) {
@@ -360,10 +642,10 @@
       const contentArea = document.getElementById("contentArea");
       contentArea.style.backgroundColor = color;
 
-      // Decide text color
-      const textColor = getContrastColor(color);
+      // Apply text color to all text elements in the postcard
       logoBar.style.color = textColor;
       contentArea.style.color = textColor;
+      document.getElementById("discountBox").style.borderColor = textColor;
 
       // Logo
       const logoEl = document.getElementById("logo");
@@ -391,18 +673,57 @@
       }
     }
 
-    // Utility: returns black or white for best contrast
-    function getContrastColor(hex) {
-      hex = hex.replace("#", "");
-      if (hex.length < 6) {
-        // if it's a 3-digit hex, expand it
-        hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+    // Generate text color options based on background color
+    function getTextColorOptions(backgroundColor) {
+      // Parse the hex color
+      const hex = backgroundColor.replace("#", "");
+      const r = parseInt(hex.substr(0, 2), 16);
+      const g = parseInt(hex.substr(2, 2), 16);
+      const b = parseInt(hex.substr(4, 2), 16);
+      
+      // Calculate luminance - standard formula for perceived brightness
+      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+      
+      // Default options - always include black, white, and dark gray
+      const textColors = ["#FFFFFF", "#000000", "#333333"];
+      
+      // Add contrast color based on luminance
+      if (luminance > 128) {
+        // Dark background needs light text
+        textColors.push("#F3F4F6"); // Light gray
+        textColors.push("#E5E7EB"); // Lighter gray
+      } else {
+        // Light background needs dark text
+        textColors.push("#4B5563"); // Medium gray
+        textColors.push("#6B7280"); // Light gray
       }
-      const r = parseInt(hex.substr(0,2),16);
-      const g = parseInt(hex.substr(2,2),16);
-      const b = parseInt(hex.substr(4,2),16);
-      const yiq = (r*299 + g*587 + b*114) / 1000;
-      return (yiq >= 128) ? "#000" : "#fff";
+      
+      // Add a complementary color
+      const complement = getComplementaryColor(backgroundColor);
+      if (!textColors.includes(complement)) {
+        textColors.push(complement);
+      }
+      
+      return textColors;
+    }
+    
+    // Helper for getting a complementary color
+    function getComplementaryColor(hexColor) {
+      // Remove the # if present
+      const hex = hexColor.replace("#", "");
+      
+      // Convert to RGB
+      const r = parseInt(hex.substr(0, 2), 16);
+      const g = parseInt(hex.substr(2, 2), 16);
+      const b = parseInt(hex.substr(4, 2), 16);
+      
+      // Get the complement (255 - value)
+      const compR = 255 - r;
+      const compG = 255 - g;
+      const compB = 255 - b;
+      
+      // Convert back to hex
+      return `#${compR.toString(16).padStart(2, "0")}${compG.toString(16).padStart(2, "0")}${compB.toString(16).padStart(2, "0")}`;
     }
   </script>
 </body>

@@ -8,9 +8,8 @@
   "dependencies": {
     "axios": "^0.27.2",
     "cheerio": "^1.0.0-rc.12",
-    "node-vibrant": "^4.0.2"
+    "node-vibrant": "^4.0.2",
     "puppeteer-core": "^19.7.3",
     "chrome-aws-lambda": "^10.1.0"
   }
 }
-
